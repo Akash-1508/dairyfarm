@@ -98,7 +98,7 @@ export const signup = async (req: Request, res: Response) => {
     });
 
     // eslint-disable-next-line no-console
-    console.log(`[auth] New user created: _id=${created._id} email=${created.email}`);
+    console.log(`[auth] New user created: created=${created}`);
 
     const { passwordHash: _ph, ...safe } = created;
     return res.status(201).json(safe);
