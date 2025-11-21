@@ -26,11 +26,11 @@ try {
     
     // Create basic .env file with SMS config
     const basicEnv = `# JWT Configuration
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production-min-32-chars
+JWT_SECRET=process.env.JWT_SECRET
 JWT_EXPIRES_IN=7d
 
 # Database Configuration
-MONGO_URI=mongodb+srv://akashgaurav:akashgaurav140@cluster0.nlftzqf.mongodb.net/rdf
+MONGO_URI=process.env.MONGO_URI
 
 # Server Configuration
 PORT=4000
