@@ -64,9 +64,27 @@ async function request(method, endpoint, data) {
     
     
     if (!res.ok) {
-      const message = json?.error || res.statusText || 'Request failed';
-      console.error(`[apiClient] Request failed:`, { status: res.status, message, json });
-      throw new Error(typeof message === 'string' ? message : 'Request failed');
+      // Try to extract detailed error message
+      let errorMessage = 'Request failed';
+      if (json?.error) {
+        if (typeof json.error === 'string') {
+          errorMessage = json.error;
+        } else if (json.error?.message) {
+          errorMessage = json.error.message;
+        } else if (json.error?.fieldErrors) {
+          // Format validation errors
+          const fieldErrors = Object.entries(json.error.fieldErrors)
+            .map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`)
+            .join('\n');
+          errorMessage = fieldErrors || json.error.message || 'Validation failed';
+        }
+      } else if (json?.message) {
+        errorMessage = json.message;
+      } else {
+        errorMessage = res.statusText || 'Request failed';
+      }
+      console.error(`[apiClient] Request failed:`, { status: res.status, message: errorMessage, json });
+      throw new Error(errorMessage);
     }
     
     return json;

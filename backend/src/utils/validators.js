@@ -46,7 +46,11 @@ const signupSchema = z.object({
       "OTP must be exactly 4 digits"
     ),
   role: z
-    .union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)])
+    .coerce
+    .number()
+    .refine((val) => [0, 1, 2, 3].includes(val), {
+      message: "Role must be 0, 1, 2, or 3"
+    })
     .optional()
     .default(2),
   milkFixedPrice: z

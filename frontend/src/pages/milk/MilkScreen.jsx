@@ -15,6 +15,7 @@ import { formatDate } from '../../utils/dateUtils';
 import { formatCurrency } from '../../utils/currencyUtils';
 import { milkService } from '../../services/milk/milkService';
 import { buyerService } from '../../services/buyers/buyerService';
+import { sellerService } from '../../services/sellers/sellerService';
 
 /**
  * Unified Milk Screen
@@ -24,13 +25,18 @@ export default function MilkScreen({ onNavigate, onLogout }) {
   const [transactionType, setTransactionType] = useState('purchase');
   const [transactions, setTransactions] = useState([]);
   const [buyers, setBuyers] = useState([]); // Buyers from buyers table
+  const [sellers, setSellers] = useState([]); // Sellers from sellers table
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showContactDropdown, setShowContactDropdown] = useState(false);
   const [showBuyerList, setShowBuyerList] = useState(false);
+  const [showSellerList, setShowSellerList] = useState(false);
   const [selectedBuyer, setSelectedBuyer] = useState(null);
+  const [selectedSeller, setSelectedSeller] = useState(null);
   const [buyersLoading, setBuyersLoading] = useState(false);
+  const [sellersLoading, setSellersLoading] = useState(false);
   const [buyersForModal, setBuyersForModal] = useState([]);
+  const [sellersForModal, setSellersForModal] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -44,10 +50,11 @@ export default function MilkScreen({ onNavigate, onLogout }) {
     notes: '',
   });
 
-  // Load transactions and buyers on mount
+  // Load transactions, buyers, and sellers on mount
   useEffect(() => {
     loadTransactions();
     loadBuyers();
+    loadSellers();
   }, []);
 
   const loadBuyers = async () => {
@@ -71,6 +78,27 @@ export default function MilkScreen({ onNavigate, onLogout }) {
     }
   };
 
+  const loadSellers = async () => {
+    try {
+      console.log('[MilkScreen] Starting to load sellers...');
+      // Load sellers from sellers table
+      const data = await sellerService.getSellers();
+      console.log('[MilkScreen] Received sellers data:', data);
+      console.log('[MilkScreen] Sellers count:', data?.length || 0);
+      
+      const sellersList = Array.isArray(data) ? data : [];
+      console.log('[MilkScreen] Setting sellers to state:', sellersList.length);
+      setSellers(sellersList);
+      return sellersList;
+    } catch (error) {
+      console.error('[MilkScreen] Failed to load sellers:', error);
+      console.error('[MilkScreen] Error stack:', error.stack);
+      // Don't show alert for sellers, just log it
+      setSellers([]);
+      return [];
+    }
+  };
+
   const loadTransactions = async () => {
     try {
       setLoading(true);
@@ -84,24 +112,41 @@ export default function MilkScreen({ onNavigate, onLogout }) {
     }
   };
 
-  // Get contacts from buyers table and from transactions (optimized with useMemo)
+  // Get contacts from buyers/sellers table and from transactions (optimized with useMemo)
   const contacts = useMemo(() => {
     const contactMap = new Map();
     
-    // Add contacts from buyers table
-    buyers.forEach((buyer) => {
-      if (buyer.mobile) {
-        const key = buyer.mobile.trim();
-        contactMap.set(key, {
-          name: buyer.name,
-          phone: buyer.mobile,
-          fixedPrice: buyer.rate, // rate from buyers table
-          dailyQuantity: buyer.quantity, // quantity from buyers table
-        });
-      }
-    });
+    // Add contacts from buyers table (for sales)
+    if (transactionType === 'sale') {
+      buyers.forEach((buyer) => {
+        if (buyer.mobile) {
+          const key = buyer.mobile.trim();
+          contactMap.set(key, {
+            name: buyer.name,
+            phone: buyer.mobile,
+            fixedPrice: buyer.rate, // rate from buyers table
+            dailyQuantity: buyer.quantity, // quantity from buyers table
+          });
+        }
+      });
+    }
     
-    // Add contacts from transactions (to include customers who might not be in buyers table)
+    // Add contacts from sellers table (for purchases)
+    if (transactionType === 'purchase') {
+      sellers.forEach((seller) => {
+        if (seller.mobile) {
+          const key = seller.mobile.trim();
+          contactMap.set(key, {
+            name: seller.name,
+            phone: seller.mobile,
+            fixedPrice: seller.rate, // rate from sellers table
+            dailyQuantity: seller.quantity, // quantity from sellers table
+          });
+        }
+      });
+    }
+    
+    // Add contacts from transactions (to include customers who might not be in buyers/sellers table)
     transactions.forEach((tx) => {
       if (transactionType === 'sale' && tx.buyerPhone) {
         const key = tx.buyerPhone.trim();
@@ -124,7 +169,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
     
     // Convert map to array and sort by name
     return Array.from(contactMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [buyers, transactions, transactionType]);
+  }, [buyers, sellers, transactions, transactionType]);
 
   const handleAddTransaction = async () => {
     // Validation
@@ -164,12 +209,17 @@ export default function MilkScreen({ onNavigate, onLogout }) {
       setLoading(true);
       const totalAmount = quantity * pricePerLiter;
 
-      // Get buyer's fixed price for reference
+      // Get buyer's/seller's fixed price for reference
       let fixedPrice = undefined;
       if (transactionType === 'sale' && formData.contactPhone) {
         const buyer = buyers.find((b) => b.mobile?.trim() === formData.contactPhone.trim());
         if (buyer && buyer.rate) {
           fixedPrice = buyer.rate;
+        }
+      } else if (transactionType === 'purchase' && formData.contactPhone) {
+        const seller = sellers.find((s) => s.mobile?.trim() === formData.contactPhone.trim());
+        if (seller && seller.rate) {
+          fixedPrice = seller.rate;
         }
       }
 
@@ -338,7 +388,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
   const monthlyBuyers = Object.keys(monthlySalesByBuyer).sort();
 
   // Get month name in Hindi/English format
-  const getMonthDisplayName = (monthYear: string) => {
+  const getMonthDisplayName = (monthYear) => {
     const [year, month] = monthYear.split('-').map(Number);
     const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -583,21 +633,70 @@ export default function MilkScreen({ onNavigate, onLogout }) {
           </View>
         )}
 
-        <TouchableOpacity
-          style={[styles.addButton, transactionType === 'sale' ? styles.addButtonSale : styles.addButtonPurchase]}
-          onPress={() => {
-            setShowForm(true);
-            setShowContactDropdown(false);
-          }}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.addButtonText}>+ Add New {transactionType === 'sale' ? 'Sale' : 'Purchase'}</Text>
-        </TouchableOpacity>
+        {/* Add New Sale Button (only for sales) */}
+        {transactionType === 'sale' && (
+          <TouchableOpacity
+            style={[styles.addButton, styles.addButtonSale]}
+            onPress={() => {
+              setShowForm(true);
+              setShowContactDropdown(false);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.addButtonText}>+ Add New Sale</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Seller List Button (only for purchases - replaces Add New Purchase) */}
+        {transactionType === 'purchase' && (
+          <TouchableOpacity
+            style={styles.buyerListButton}
+            onPress={async () => {
+              try {
+                setSellersLoading(true);
+                const loadedSellers = await loadSellers(); // Reload sellers before showing list
+                console.log('[MilkScreen] Loaded sellers count:', loadedSellers.length);
+                console.log('[MilkScreen] Loaded sellers data:', loadedSellers);
+                
+                // Set sellers for modal explicitly
+                setSellersForModal(loadedSellers);
+                
+                if (loadedSellers.length === 0) {
+                  Alert.alert(
+                    'No Sellers',
+                    'No sellers found. Please create sellers from the Seller screen first.',
+                    [{ text: 'OK' }]
+                  );
+                } else {
+                  // Small delay to ensure state is set
+                  setTimeout(() => {
+                    setShowSellerList(true);
+                  }, 100);
+                }
+              } catch (error) {
+                console.error('Error opening seller list:', error);
+                Alert.alert('Error', `Failed to load seller list: ${error.message || 'Unknown error'}`);
+              } finally {
+                setSellersLoading(false);
+              }
+            }}
+            activeOpacity={0.7}
+            disabled={sellersLoading}
+          >
+            <Text style={styles.buyerListButtonText}>
+              {sellersLoading ? 'Loading...' : '📋 Seller List - Select & Purchase'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {filteredTransactions.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No {transactionType === 'sale' ? 'sale' : 'purchase'} records yet</Text>
-            <Text style={styles.emptySubtext}>Tap "Add New {transactionType === 'sale' ? 'Sale' : 'Purchase'}" to add one</Text>
+            <Text style={styles.emptySubtext}>
+              {transactionType === 'sale' 
+                ? 'Tap "Add New Sale" to add one' 
+                : 'Tap "Seller List" to select a seller and purchase milk'}
+            </Text>
           </View>
         ) : (
           dayWiseTransactions.map((dayGroup) => {
@@ -879,6 +978,186 @@ export default function MilkScreen({ onNavigate, onLogout }) {
                             {buyer.quantity && (
                               <Text style={styles.buyerListItemDetail}>
                                 {buyer.quantity.toFixed(2)}L/day
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                        <Text style={styles.buyerListItemArrow}>→</Text>
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </ScrollView>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Seller List Modal */}
+      <Modal
+        visible={showSellerList}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setShowSellerList(false);
+          setSelectedSeller(null);
+          // Don't clear sellersForModal, keep it for next time
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Seller List</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowSellerList(false);
+                  setSelectedSeller(null);
+                }}
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ flex: 1 }}>
+              {selectedSeller ? (
+              // Seller Details View
+              <ScrollView style={styles.buyerDetailsContainer}>
+                <View style={styles.buyerDetailsCard}>
+                  <Text style={styles.buyerDetailsName}>{selectedSeller.name}</Text>
+                  {selectedSeller.mobile && (
+                    <Text style={styles.buyerDetailsPhone}>📱 {selectedSeller.mobile}</Text>
+                  )}
+                  {selectedSeller.email && (
+                    <Text style={styles.buyerDetailsEmail}>✉️ {selectedSeller.email}</Text>
+                  )}
+                  
+                  <View style={styles.buyerDetailsDivider} />
+                  
+                  <View style={styles.buyerDetailsRow}>
+                    <Text style={styles.buyerDetailsLabel}>Fixed Milk Price:</Text>
+                    <Text style={styles.buyerDetailsValue}>
+                      {selectedSeller.rate 
+                        ? `₹${selectedSeller.rate.toFixed(2)}/Liter`
+                        : 'Not Set'
+                      }
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.buyerDetailsRow}>
+                    <Text style={styles.buyerDetailsLabel}>Daily Milk Quantity:</Text>
+                    <Text style={styles.buyerDetailsValue}>
+                      {selectedSeller.quantity 
+                        ? `${selectedSeller.quantity.toFixed(2)} Liters`
+                        : 'Not Set'
+                      }
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.buyerDetailsActions}>
+                  <TouchableOpacity
+                    style={styles.backButton}
+                    onPress={() => setSelectedSeller(null)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.backButtonText}>← Back to List</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.sellMilkButton}
+                    onPress={() => {
+                      // Pre-fill form with seller data
+                      const quantityToFill = selectedSeller.quantity 
+                        ? selectedSeller.quantity.toString() 
+                        : '';
+                      const priceToFill = selectedSeller.rate 
+                        ? selectedSeller.rate.toString() 
+                        : '';
+                      
+                      setFormData({
+                        date: new Date().toISOString().split('T')[0],
+                        quantity: quantityToFill,
+                        pricePerLiter: priceToFill,
+                        contactName: selectedSeller.name,
+                        contactPhone: selectedSeller.mobile || '',
+                        notes: '',
+                      });
+                      
+                      setShowSellerList(false);
+                      setSelectedSeller(null);
+                      setShowForm(true);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.sellMilkButtonText}>💰 Purchase Milk</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            ) : (
+              // Seller List View
+              <ScrollView style={styles.buyerListContainer}>
+                {(() => {
+                  // Use sellersForModal if available, otherwise fall back to sellers
+                  const sellersToShow = sellersForModal.length > 0 ? sellersForModal : sellers;
+                  console.log('[MilkScreen] Rendering seller list');
+                  console.log('[MilkScreen] sellersForModal count:', sellersForModal.length);
+                  console.log('[MilkScreen] sellers count:', sellers.length);
+                  console.log('[MilkScreen] sellersToShow count:', sellersToShow.length);
+                  console.log('[MilkScreen] sellersToShow data:', sellersToShow);
+                  return sellersToShow.length === 0;
+                })() ? (
+                  <View style={styles.emptyBuyerList}>
+                    <Text style={styles.emptyBuyerListText}>No sellers found</Text>
+                    <Text style={styles.emptyBuyerListSubtext}>
+                      Create sellers from the Seller screen
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.refreshButton}
+                      onPress={async () => {
+                        try {
+                          setLoading(true);
+                          const refreshed = await loadSellers();
+                          setSellersForModal(refreshed);
+                        } catch (error) {
+                          console.error('Error refreshing sellers:', error);
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.refreshButtonText}>🔄 Refresh</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  (sellersForModal.length > 0 ? sellersForModal : sellers).map((seller, index) => {
+                    console.log(`[MilkScreen] Rendering seller ${index}:`, seller);
+                    return (
+                      <TouchableOpacity
+                        key={seller._id || `seller-${index}`}
+                        style={styles.buyerListItem}
+                        onPress={() => {
+                          console.log('[MilkScreen] Seller selected:', seller);
+                          setSelectedSeller(seller);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.buyerListItemContent}>
+                          <Text style={styles.buyerListItemName}>{seller.name || 'Unknown'}</Text>
+                          {seller.mobile && (
+                            <Text style={styles.buyerListItemPhone}>{seller.mobile}</Text>
+                          )}
+                          <View style={styles.buyerListItemDetails}>
+                            {seller.rate && (
+                              <Text style={styles.buyerListItemDetail}>
+                                ₹{seller.rate.toFixed(2)}/L
+                              </Text>
+                            )}
+                            {seller.quantity && (
+                              <Text style={styles.buyerListItemDetail}>
+                                {seller.quantity.toFixed(2)}L/day
                               </Text>
                             )}
                           </View>

@@ -39,13 +39,16 @@ export default function SellerScreen({ onNavigate, onLogout }) {
       setLoading(true);
       const [txData, sellersList] = await Promise.all([
         milkService.getTransactions(),
-        sellerService.getSellers().catch(() => []),
+        sellerService.getSellers(),
       ]);
+      console.log('[SellerScreen] Loaded sellers:', sellersList);
       setTransactions(txData);
-      setSellersData(sellersList);
+      setSellersData(Array.isArray(sellersList) ? sellersList : []);
     } catch (error) {
       console.error('Failed to load data:', error);
-      Alert.alert('Error', 'Failed to load seller data. Please try again.');
+      // Don't show alert for seller fetch errors, just log it
+      setSellersData([]);
+      setTransactions([]);
     } finally {
       setLoading(false);
     }
@@ -174,14 +177,18 @@ export default function SellerScreen({ onNavigate, onLogout }) {
       setFormData({ name: '', mobile: '', email: '', milkFixedPrice: '', dailyMilkQuantity: '' });
       setShowAddForm(false);
       
-      // Reload data to show new seller immediately
-      await loadData();
-      
-      // Show success message after data is loaded
+      // Show success message first
       Alert.alert('Success', 'Seller created successfully!');
+      
+      // Small delay to ensure backend has processed, then reload data
+      setTimeout(async () => {
+        await loadData();
+      }, 500);
     } catch (error) {
       console.error('Failed to create seller:', error);
-      Alert.alert('Error', error.message || 'Failed to create seller. Please try again.');
+      const errorMessage = error?.message || error?.toString() || 'Failed to create seller';
+      console.log('Full error details:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', `Failed to create seller: ${errorMessage})`);
     } finally {
       setLoading(false);
     }
