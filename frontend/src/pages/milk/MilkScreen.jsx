@@ -843,7 +843,10 @@ export default function MilkScreen({ onNavigate, onLogout }) {
             <View style={{ flex: 1 }}>
               {selectedBuyer ? (
               // Buyer Details View
-              <ScrollView style={styles.buyerDetailsContainer}>
+              <ScrollView 
+                style={styles.buyerDetailsContainer}
+                contentContainerStyle={styles.buyerDetailsContentContainer}
+              >
                 <View style={styles.buyerDetailsCard}>
                   <Text style={styles.buyerDetailsName}>{selectedBuyer.name}</Text>
                   {selectedBuyer.mobile && (
@@ -917,7 +920,10 @@ export default function MilkScreen({ onNavigate, onLogout }) {
               </ScrollView>
             ) : (
               // Buyer List View
-              <ScrollView style={styles.buyerListContainer}>
+              <ScrollView 
+                style={styles.buyerListContainer}
+                contentContainerStyle={styles.buyerListContentContainer}
+              >
                 {(() => {
                   // Use buyersForModal if available, otherwise fall back to buyers
                   const buyersToShow = buyersForModal.length > 0 ? buyersForModal : buyers;
@@ -1023,7 +1029,10 @@ export default function MilkScreen({ onNavigate, onLogout }) {
             <View style={{ flex: 1 }}>
               {selectedSeller ? (
               // Seller Details View
-              <ScrollView style={styles.buyerDetailsContainer}>
+              <ScrollView 
+                style={styles.buyerDetailsContainer}
+                contentContainerStyle={styles.buyerDetailsContentContainer}
+              >
                 <View style={styles.buyerDetailsCard}>
                   <Text style={styles.buyerDetailsName}>{selectedSeller.name}</Text>
                   {selectedSeller.mobile && (
@@ -1097,7 +1106,10 @@ export default function MilkScreen({ onNavigate, onLogout }) {
               </ScrollView>
             ) : (
               // Seller List View
-              <ScrollView style={styles.buyerListContainer}>
+              <ScrollView 
+                style={styles.buyerListContainer}
+                contentContainerStyle={styles.buyerListContentContainer}
+              >
                 {(() => {
                   // Use sellersForModal if available, otherwise fall back to sellers
                   const sellersToShow = sellersForModal.length > 0 ? sellersForModal : sellers;
@@ -1196,7 +1208,10 @@ export default function MilkScreen({ onNavigate, onLogout }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.formContainer}>
+            <ScrollView 
+              style={styles.formContainer}
+              contentContainerStyle={styles.formContentContainer}
+            >
               <Text style={styles.label}>{transactionType === 'sale' ? 'Sale' : 'Purchase'} Date *</Text>
               <Input
                 placeholder="YYYY-MM-DD"
@@ -1542,6 +1557,9 @@ const styles = StyleSheet.create({
   formContainer: {
     padding: 20,
   },
+  formContentContainer: {
+    paddingBottom: 30,
+  },
   label: {
     fontSize: 14,
     fontWeight: '600',
@@ -1791,6 +1809,9 @@ const styles = StyleSheet.create({
     padding: 10,
     minHeight: 200,
   },
+  buyerListContentContainer: {
+    paddingBottom: 30,
+  },
   buyerListItem: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -1867,6 +1888,9 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 10,
   },
+  buyerDetailsContentContainer: {
+    paddingBottom: 30,
+  },
   buyerDetailsCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
@@ -1922,6 +1946,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 10,
+    marginBottom: 20,
+    paddingBottom: 10,
   },
   backButton: {
     flex: 1,

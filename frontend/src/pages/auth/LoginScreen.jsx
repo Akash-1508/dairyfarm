@@ -104,9 +104,11 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     marginBottom: 16,
+    color: '#000000',
   },
   input: {
     marginBottom: 12,
+    backgroundColor: '#FFFFFF',
   },
   forgotPasswordLink: {
     alignItems: 'center',

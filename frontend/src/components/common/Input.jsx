@@ -12,8 +12,9 @@ export default function Input({ style, showPasswordToggle, secureTextEntry, ...p
     return (
       <View style={[styles.inputContainer, style]}>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { flex: 1 }]}
           secureTextEntry={!isPasswordVisible}
+          placeholderTextColor="#999999"
           {...props}
         />
         <TouchableOpacity
@@ -26,7 +27,14 @@ export default function Input({ style, showPasswordToggle, secureTextEntry, ...p
     );
   }
 
-  return <TextInput style={[styles.input, style]} secureTextEntry={secureTextEntry} {...props} />;
+  return (
+    <TextInput 
+      style={[styles.input, style]} 
+      secureTextEntry={secureTextEntry} 
+      placeholderTextColor="#999999"
+      {...props} 
+    />
+  );
 }
 
 const styles = StyleSheet.create({
@@ -37,6 +45,9 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     flex: 1,
+    backgroundColor: '#FFFFFF',
+    color: '#000000',
+    minHeight: 48,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -45,6 +56,8 @@ const styles = StyleSheet.create({
     borderColor: '#CCCCCC',
     borderRadius: 8,
     paddingRight: 12,
+    backgroundColor: '#FFFFFF',
+    minHeight: 48,
   },
   eyeButton: {
     padding: 8,

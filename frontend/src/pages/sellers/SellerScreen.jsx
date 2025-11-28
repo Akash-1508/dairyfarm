@@ -224,7 +224,9 @@ export default function SellerScreen({ onNavigate, onLogout }) {
         ) : (
           <>
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Total Sellers</Text>
+              <Text style={styles.summaryTitle} numberOfLines={2}>
+                Total Sellers
+              </Text>
               <Text style={styles.summaryValue}>{sellers.length}</Text>
             </View>
 
@@ -422,11 +424,15 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 15,
     alignItems: 'center',
+    width: '100%',
   },
   summaryTitle: {
     fontSize: 16,
     color: '#FFFFFF',
     marginBottom: 8,
+    textAlign: 'center',
+    flexShrink: 1,
+    paddingHorizontal: 5,
   },
   summaryValue: {
     fontSize: 32,
