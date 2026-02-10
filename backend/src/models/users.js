@@ -82,7 +82,6 @@ const UserSchema = new mongoose.Schema({
 
 // Indexes
 UserSchema.index({ email: 1 });
-UserSchema.index({ mobile: 1 });
 UserSchema.index({ role: 1 });
 
 const User = mongoose.model('User', UserSchema);
