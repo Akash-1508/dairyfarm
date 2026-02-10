@@ -80,7 +80,7 @@ const UserSchema = new mongoose.Schema({
   }
 });
 
-// Indexes
+
 UserSchema.index({ email: 1 });
 UserSchema.index({ role: 1 });
 
