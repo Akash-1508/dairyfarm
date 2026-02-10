@@ -24,5 +24,14 @@ function requireAuth(req, res, next) {
   }
 }
 
-module.exports = { requireAuth };
+/** Only super_admin (0) and admin (1) can proceed */
+function requireAdminOrSuperAdmin(req, res, next) {
+  const role = req.user?.role;
+  if (role !== 0 && role !== 1) {
+    return res.status(403).json({ error: "Access denied. Only admin or super admin can perform this action." });
+  }
+  return next();
+}
+
+module.exports = { requireAuth, requireAdminOrSuperAdmin };
 

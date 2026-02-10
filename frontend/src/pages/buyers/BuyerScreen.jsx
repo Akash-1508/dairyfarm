@@ -13,6 +13,7 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { milkService } from '../../services/milk/milkService';
 import { buyerService } from '../../services/buyers/buyerService';
+import { userService } from '../../services/users/userService';
 import { formatCurrency } from '../../utils/currencyUtils';
 import { authService } from '../../services/auth/authService';
 
@@ -22,6 +23,9 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [selectedBuyer, setSelectedBuyer] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editingBuyer, setEditingBuyer] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     mobile: '',
@@ -30,8 +34,18 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
     dailyMilkQuantity: '',
   });
 
+  const canEditUsers = currentUser?.role === 0 || currentUser?.role === 1;
+
   useEffect(() => {
     loadData();
+  }, []);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      const user = await authService.getCurrentUser();
+      setCurrentUser(user);
+    };
+    loadUser();
   }, []);
 
   const loadData = async () => {
@@ -60,13 +74,15 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       if (buyer.mobile) {
         const key = buyer.mobile.trim();
         buyerMap.set(key, {
+          userId: buyer.userId,
           name: buyer.name,
           phone: buyer.mobile,
+          email: buyer.email || '',
           totalQuantity: 0,
           totalAmount: 0,
           transactionCount: 0,
-          fixedPrice: buyer.rate, // rate from buyers table
-          dailyQuantity: buyer.quantity, // quantity from buyers table
+          fixedPrice: buyer.rate,
+          dailyQuantity: buyer.quantity,
         });
       }
     });
@@ -117,6 +133,54 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       month: '2-digit',
       year: 'numeric',
     });
+  };
+
+  const openEditForm = (buyer) => {
+    setEditingBuyer(buyer);
+    setFormData({
+      name: buyer.name || '',
+      mobile: buyer.phone || '',
+      email: buyer.email || '',
+      milkFixedPrice: buyer.fixedPrice != null ? String(buyer.fixedPrice) : '',
+      dailyMilkQuantity: buyer.dailyQuantity != null ? String(buyer.dailyQuantity) : '',
+    });
+    setShowEditForm(true);
+  };
+
+  const handleUpdateBuyer = async () => {
+    if (!editingBuyer?.userId) {
+      Alert.alert('Error', 'Cannot update this buyer.');
+      return;
+    }
+    if (!formData.name || !formData.mobile) {
+      Alert.alert('Error', 'Please fill name and mobile number');
+      return;
+    }
+    if (!/^[0-9]{10}$/.test(formData.mobile.trim())) {
+      Alert.alert('Error', 'Mobile must be exactly 10 digits');
+      return;
+    }
+    try {
+      setLoading(true);
+      const fixedPrice = formData.milkFixedPrice?.trim() ? parseFloat(formData.milkFixedPrice) : undefined;
+      const dailyQuantity = formData.dailyMilkQuantity?.trim() ? parseFloat(formData.dailyMilkQuantity) : undefined;
+      await userService.updateUser(editingBuyer.userId, {
+        name: formData.name.trim(),
+        email: formData.email?.trim() || '',
+        mobile: formData.mobile.trim(),
+        milkFixedPrice: fixedPrice,
+        dailyMilkQuantity: dailyQuantity,
+      });
+      setShowEditForm(false);
+      setEditingBuyer(null);
+      await loadData();
+      Alert.alert('Success', 'Buyer updated successfully!');
+    } catch (error) {
+      console.error('Failed to update buyer:', error);
+      Alert.alert('Error', error.message || 'Failed to update buyer. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCreateBuyer = async () => {
@@ -239,6 +303,15 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                         <Text style={styles.buyerPhone}>{buyer.phone}</Text>
                       </View>
                       <View style={styles.buyerHeaderRight}>
+                        {canEditUsers && buyer.userId && (
+                          <TouchableOpacity
+                            style={styles.editButton}
+                            onPress={() => openEditForm(buyer)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.editButtonText}>Edit</Text>
+                          </TouchableOpacity>
+                        )}
                         <Text style={styles.buyerAmount}>{formatCurrency(buyer.totalAmount)}</Text>
                         <Text style={styles.buyerQuantity}>{buyer.totalQuantity.toFixed(2)} L</Text>
                         <Text style={styles.expandIcon}>{isExpanded ? '▲' : '▼'}</Text>
@@ -297,6 +370,76 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
           </>
         )}
       </ScrollView>
+
+      {/* Edit Buyer Modal */}
+      <Modal
+        visible={showEditForm}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => { setShowEditForm(false); setEditingBuyer(null); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Buyer</Text>
+              <TouchableOpacity
+                onPress={() => { setShowEditForm(false); setEditingBuyer(null); }}
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.formContainer}>
+              <Text style={styles.label}>Name *</Text>
+              <Input
+                placeholder="Enter buyer name"
+                value={formData.name}
+                onChangeText={(text) => setFormData({ ...formData, name: text })}
+                style={styles.input}
+              />
+              <Text style={styles.label}>Mobile Number *</Text>
+              <Input
+                placeholder="Enter 10 digit mobile number"
+                value={formData.mobile}
+                onChangeText={(text) => setFormData({ ...formData, mobile: text })}
+                keyboardType="phone-pad"
+                style={styles.input}
+              />
+              <Text style={styles.label}>Email (Optional)</Text>
+              <Input
+                placeholder="Enter email address"
+                value={formData.email}
+                onChangeText={(text) => setFormData({ ...formData, email: text })}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={styles.input}
+              />
+              <Text style={styles.label}>Fixed Milk Price (₹/L) (Optional)</Text>
+              <Input
+                placeholder="Enter fixed price per liter"
+                value={formData.milkFixedPrice}
+                onChangeText={(text) => setFormData({ ...formData, milkFixedPrice: text })}
+                keyboardType="decimal-pad"
+                style={styles.input}
+              />
+              <Text style={styles.label}>Daily Milk Quantity (Liters) (Optional)</Text>
+              <Input
+                placeholder="Enter expected daily milk quantity"
+                value={formData.dailyMilkQuantity}
+                onChangeText={(text) => setFormData({ ...formData, dailyMilkQuantity: text })}
+                keyboardType="decimal-pad"
+                style={styles.input}
+              />
+              <Button
+                title={loading ? 'Updating...' : 'Update Buyer'}
+                onPress={handleUpdateBuyer}
+                disabled={loading}
+                style={styles.createButton}
+              />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Add Buyer Modal */}
       <Modal
@@ -478,6 +621,18 @@ const styles = StyleSheet.create({
   expandIcon: {
     fontSize: 12,
     color: '#666',
+  },
+  editButton: {
+    backgroundColor: '#FF9800',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginBottom: 6,
+  },
+  editButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
   buyerStats: {
     flexDirection: 'row',

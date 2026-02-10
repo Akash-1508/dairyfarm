@@ -39,5 +39,15 @@ export const userService = {
       throw error;
     }
   },
+
+  /**
+   * Update user (only admin/super_admin should call)
+   * @param {string} userId
+   * @param {Object} data - name?, email?, mobile?, address?, isActive?, milkFixedPrice?, dailyMilkQuantity?
+   */
+  updateUser: async (userId, data) => {
+    const response = await apiClient.patch(`/users/${userId}`, data);
+    return response;
+  },
 };
 

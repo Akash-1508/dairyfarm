@@ -1,9 +1,13 @@
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const path = require("path");
+const dns = require("dns");
 
 // Load .env file from backend root directory
 dotenv.config({ path: path.join(__dirname, "..", "..", ".env") });
+
+// Is system pe DNS SRV resolve nahi hota; Node ko Google DNS use karne do
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 let isConnected = false;
 

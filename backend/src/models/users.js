@@ -135,6 +135,27 @@ async function updateUserPassword(userId, newPasswordHash) {
   return await user.save();
 }
 
+async function updateUser(userId, updates) {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+  if (updates.name !== undefined) user.name = updates.name.trim();
+  if (updates.email !== undefined) user.email = (updates.email || "").trim().toLowerCase();
+  if (updates.address !== undefined) user.address = (updates.address || "").trim();
+  if (updates.isActive !== undefined) user.isActive = !!updates.isActive;
+  if (updates.mobile !== undefined) {
+    const mobile = updates.mobile.trim();
+    if (!/^[0-9]{10}$/.test(mobile)) throw new Error("Invalid mobile number");
+    const existing = await User.findOne({ mobile });
+    if (existing && existing._id.toString() !== userId.toString()) {
+      throw new Error("Mobile already in use");
+    }
+    user.mobile = mobile;
+  }
+  return await user.save();
+}
+
 module.exports = {
   User,
   UserRoles,
@@ -144,4 +165,5 @@ module.exports = {
   addUser,
   getUsersByRole,
   updateUserPassword,
+  updateUser,
 };

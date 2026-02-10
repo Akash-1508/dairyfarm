@@ -183,6 +183,9 @@ export const apiClient = {
   put: async (endpoint, data) => {
     return request('PUT', endpoint, data);
   },
+  patch: async (endpoint, data) => {
+    return request('PATCH', endpoint, data);
+  },
   delete: async (endpoint) => {
     return request('DELETE', endpoint);
   },
