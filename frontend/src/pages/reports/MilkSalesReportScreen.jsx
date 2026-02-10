@@ -6,6 +6,10 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Share,
+  ActivityIndicator,
+  Modal,
+  FlatList,
 } from 'react-native';
 import HeaderWithMenu from '../../components/common/HeaderWithMenu';
 import Input from '../../components/common/Input';
@@ -13,16 +17,27 @@ import { formatDate } from '../../utils/dateUtils';
 import { formatCurrency } from '../../utils/currencyUtils';
 import { milkService } from '../../services/milk/milkService';
 import { buyerService } from '../../services/buyers/buyerService';
+import { reportService } from '../../services/reports/reportService';
+import { getAuthToken } from '../../services/api/apiClient';
+import ReactNativeBlobUtil from 'react-native-blob-util';
 
 /**
  * Milk Sales Report Screen
  * Comprehensive dashboard showing milk sales with buyer-wise breakdown
  */
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
 export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
+  const now = new Date();
   const [transactions, setTransactions] = useState([]);
   const [buyers, setBuyers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [reportYear, setReportYear] = useState(now.getFullYear());
+  const [reportMonth, setReportMonth] = useState(now.getMonth() + 1);
+  const [downloadLoading, setDownloadLoading] = useState(null);
+  const [selectedConsumerForDownload, setSelectedConsumerForDownload] = useState(null);
+  const [showConsumerPicker, setShowConsumerPicker] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -43,6 +58,58 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDownloadExport = async (format, buyerMobile = null) => {
+    try {
+      const key = buyerMobile ? `${format}-${buyerMobile}` : format;
+      setDownloadLoading(key);
+      const token = await getAuthToken();
+      if (!token) {
+        Alert.alert('Error', 'Please log in to download.');
+        return;
+      }
+      const url = reportService.getConsumerExportUrl({
+        year: reportYear,
+        month: reportMonth,
+        format: format === 'pdf' ? 'pdf' : 'excel',
+        buyerMobile: buyerMobile || undefined,
+      });
+      const ext = format === 'pdf' ? 'pdf' : 'xlsx';
+      const filename = `consumer-milk-${reportYear}-${String(reportMonth).padStart(2, '0')}.${ext}`;
+      const res = await ReactNativeBlobUtil.config({
+        fileCache: true,
+        addAndroidDownloads: { useDownloadManager: true, notification: true, path: ReactNativeBlobUtil.fs.dirs.DownloadDir + '/' + filename },
+      }).fetch('GET', url, { Authorization: `Bearer ${token}` });
+      const path = res.path();
+      const pathWithScheme = path.startsWith('file://') ? path : `file://${path}`;
+      await Share.share({
+        url: pathWithScheme,
+        type: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        title: buyerMobile
+          ? `Milk Report - ${MONTH_NAMES[reportMonth - 1]} ${reportYear}`
+          : `Consumer Milk Report ${MONTH_NAMES[reportMonth - 1]} ${reportYear}`,
+      });
+    } catch (error) {
+      console.error('Download failed:', error);
+      Alert.alert('Error', error.message || 'Download failed. Please try again.');
+    } finally {
+      setDownloadLoading(null);
+    }
+  };
+
+  const changeReportMonth = (delta) => {
+    let m = reportMonth + delta;
+    let y = reportYear;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    } else if (m < 1) {
+      m = 12;
+      y -= 1;
+    }
+    setReportMonth(m);
+    setReportYear(y);
   };
 
   // Filter sales transactions only
@@ -177,6 +244,108 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
               <Text style={styles.clearButtonText}>✕</Text>
             </TouchableOpacity>
           )}
+        </View>
+
+        {/* Download monthly report - Particular consumer or All */}
+        <View style={styles.downloadSection}>
+          <Text style={styles.downloadSectionTitle}>Download Monthly Consumer Report</Text>
+          <Text style={styles.downloadSectionSubtext}>
+            Pehle consumer select karein, phir Excel/PDF download karein (sirf usi consumer ki report)
+          </Text>
+          <TouchableOpacity
+            style={styles.consumerSelectRow}
+            onPress={() => setShowConsumerPicker(true)}
+          >
+            <Text style={styles.consumerSelectLabel}>Consumer:</Text>
+            <Text style={styles.consumerSelectValue} numberOfLines={1}>
+              {selectedConsumerForDownload ? selectedConsumerForDownload.name : 'All consumers'}
+            </Text>
+            <Text style={styles.consumerSelectArrow}>▼</Text>
+          </TouchableOpacity>
+          <Modal
+            visible={showConsumerPicker}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setShowConsumerPicker(false)}
+          >
+            <TouchableOpacity
+              style={styles.consumerPickerOverlay}
+              activeOpacity={1}
+              onPress={() => setShowConsumerPicker(false)}
+            >
+              <View style={styles.consumerPickerBox} onStartShouldSetResponder={() => true}>
+                <Text style={styles.consumerPickerTitle}>Select consumer</Text>
+                <TouchableOpacity
+                  style={styles.consumerPickerItem}
+                  onPress={() => {
+                    setSelectedConsumerForDownload(null);
+                    setShowConsumerPicker(false);
+                  }}
+                >
+                  <Text style={styles.consumerPickerItemText}>All consumers</Text>
+                </TouchableOpacity>
+                <FlatList
+                  data={filteredBuyerSales}
+                  keyExtractor={(item) => item.mobile || ''}
+                  style={{ maxHeight: 280 }}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.consumerPickerItem}
+                      onPress={() => {
+                        setSelectedConsumerForDownload({ name: item.name, mobile: item.mobile });
+                        setShowConsumerPicker(false);
+                      }}
+                    >
+                      <Text style={styles.consumerPickerItemText} numberOfLines={1}>
+                        {item.name} ({item.mobile})
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                />
+                <TouchableOpacity
+                  style={styles.consumerPickerCancel}
+                  onPress={() => setShowConsumerPicker(false)}
+                >
+                  <Text style={styles.consumerPickerCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </Modal>
+          <View style={styles.monthSelectorRow}>
+            <TouchableOpacity onPress={() => changeReportMonth(-1)} style={styles.monthArrow}>
+              <Text style={styles.monthArrowText}>←</Text>
+            </TouchableOpacity>
+            <Text style={styles.monthLabel}>
+              {MONTH_NAMES[reportMonth - 1]} {reportYear}
+            </Text>
+            <TouchableOpacity onPress={() => changeReportMonth(1)} style={styles.monthArrow}>
+              <Text style={styles.monthArrowText}>→</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.downloadButtonsRow}>
+            <TouchableOpacity
+              style={[styles.downloadButton, styles.downloadButtonExcel]}
+              onPress={() => handleDownloadExport('excel', selectedConsumerForDownload?.mobile)}
+              disabled={downloadLoading != null}
+            >
+              {(downloadLoading === 'excel' || (selectedConsumerForDownload && downloadLoading === `excel-${selectedConsumerForDownload.mobile}`)) ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.downloadButtonText}>📥 Download Excel</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.downloadButton, styles.downloadButtonPdf]}
+              onPress={() => handleDownloadExport('pdf', selectedConsumerForDownload?.mobile)}
+              disabled={downloadLoading != null}
+            >
+              {(downloadLoading === 'pdf' || (selectedConsumerForDownload && downloadLoading === `pdf-${selectedConsumerForDownload.mobile}`)) ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.downloadButtonText}>📄 Download PDF</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Overall Statistics */}
@@ -399,6 +568,35 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
                         )}
                       </View>
                     )}
+
+                    {/* Download this customer - month from top selector */}
+                    <View style={styles.buyerDownloadRow}>
+                      <Text style={styles.buyerDownloadLabel}>Download this customer:</Text>
+                      <View style={styles.buyerDownloadButtons}>
+                        <TouchableOpacity
+                          style={[styles.buyerDownloadBtn, styles.buyerDownloadBtnExcel]}
+                          onPress={() => handleDownloadExport('excel', buyer.mobile)}
+                          disabled={downloadLoading != null}
+                        >
+                          {downloadLoading === `excel-${buyer.mobile}` ? (
+                            <ActivityIndicator color="#fff" size="small" />
+                          ) : (
+                            <Text style={styles.buyerDownloadBtnText}>Excel</Text>
+                          )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.buyerDownloadBtn, styles.buyerDownloadBtnPdf]}
+                          onPress={() => handleDownloadExport('pdf', buyer.mobile)}
+                          disabled={downloadLoading != null}
+                        >
+                          {downloadLoading === `pdf-${buyer.mobile}` ? (
+                            <ActivityIndicator color="#fff" size="small" />
+                          ) : (
+                            <Text style={styles.buyerDownloadBtnText}>PDF</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
                   </View>
                 </View>
               ))
@@ -441,6 +639,136 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontWeight: 'bold',
+  },
+  downloadSection: {
+    backgroundColor: '#E8F5E9',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  downloadSectionTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+    marginBottom: 4,
+  },
+  downloadSectionSubtext: {
+    fontSize: 13,
+    color: '#555',
+    marginBottom: 12,
+  },
+  consumerSelectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  consumerSelectLabel: {
+    fontSize: 14,
+    color: '#2E7D32',
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  consumerSelectValue: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1B5E20',
+  },
+  consumerSelectArrow: {
+    fontSize: 12,
+    color: '#2E7D32',
+  },
+  consumerPickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  consumerPickerBox: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    maxHeight: '70%',
+    padding: 16,
+  },
+  consumerPickerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  consumerPickerItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  consumerPickerItemText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  consumerPickerCancel: {
+    marginTop: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  consumerPickerCancelText: {
+    fontSize: 16,
+    color: '#C62828',
+    fontWeight: '600',
+  },
+  monthSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  monthArrow: {
+    padding: 10,
+    marginHorizontal: 8,
+  },
+  monthArrowText: {
+    fontSize: 20,
+    color: '#2E7D32',
+    fontWeight: 'bold',
+  },
+  monthLabel: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1B5E20',
+    minWidth: 160,
+    textAlign: 'center',
+  },
+  downloadButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  downloadButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    minWidth: 140,
+    alignItems: 'center',
+  },
+  downloadButtonExcel: {
+    backgroundColor: '#217346',
+  },
+  downloadButtonPdf: {
+    backgroundColor: '#C62828',
+  },
+  downloadButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   statsContainer: {
     marginBottom: 20,
@@ -665,6 +993,39 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 8,
     textAlign: 'center',
+  },
+  buyerDownloadRow: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  buyerDownloadLabel: {
+    fontSize: 13,
+    color: '#555',
+    marginBottom: 8,
+  },
+  buyerDownloadButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  buyerDownloadBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    minWidth: 72,
+    alignItems: 'center',
+  },
+  buyerDownloadBtnExcel: {
+    backgroundColor: '#217346',
+  },
+  buyerDownloadBtnPdf: {
+    backgroundColor: '#C62828',
+  },
+  buyerDownloadBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   flowChartContainer: {
     marginBottom: 20,

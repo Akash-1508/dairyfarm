@@ -1,6 +1,8 @@
 const { MilkTransaction } = require("../models/milk");
 const { CharaPurchase } = require("../models/chara");
 const { User, UserRoles } = require("../models/users");
+const XLSX = require("xlsx");
+const PDFDocument = require("pdfkit");
 
 const TREND_PERIOD_LABELS = {
   weekly: "Weekly",
@@ -481,6 +483,325 @@ async function getDashboardSummary(req, res) {
   }
 }
 
+async function getConsumerConsumptionMonthly(req, res) {
+  try {
+    const periodRange = getMonthRange(req.query.year, req.query.month);
+    const pipeline = [
+      {
+        $match: {
+          type: "sale",
+          date: { $gte: periodRange.start, $lte: periodRange.end }
+        }
+      },
+      {
+        $addFields: {
+          normalizedBuyerPhone: {
+            $trim: { input: { $ifNull: ["$buyerPhone", ""] } }
+          }
+        }
+      },
+      { $match: { normalizedBuyerPhone: { $ne: "" } } },
+      {
+        $group: {
+          _id: "$normalizedBuyerPhone",
+          buyerName: { $first: "$buyer" },
+          totalQuantity: { $sum: "$quantity" },
+          totalAmount: { $sum: "$totalAmount" },
+          transactionCount: { $sum: 1 }
+        }
+      },
+      { $sort: { totalAmount: -1 } }
+    ];
+    const agg = await MilkTransaction.aggregate(pipeline);
+    const consumerPhones = agg.map((e) => e._id);
+    const users = await User.find({
+      mobile: { $in: consumerPhones },
+      role: UserRoles.CONSUMER
+    }).select("name mobile");
+    const nameByMobile = new Map(users.map((u) => [u.mobile, u.name]));
+    const summary = agg.map((e) => {
+      const qty = Number(e.totalQuantity ?? 0);
+      const amt = Number(e.totalAmount ?? 0);
+      return {
+        name: nameByMobile.get(e._id) || e.buyerName || "Unknown",
+        mobile: e._id,
+        totalQuantity: qty,
+        totalAmount: amt,
+        averageRate: qty ? amt / qty : 0,
+        transactionCount: Number(e.transactionCount ?? 0)
+      };
+    });
+    const dailyTrend = await MilkTransaction.aggregate([
+      {
+        $match: {
+          type: "sale",
+          date: { $gte: periodRange.start, $lte: periodRange.end }
+        }
+      },
+      {
+        $addFields: {
+          dateKey: {
+            $dateToString: { format: "%Y-%m-%d", date: "$date" }
+          }
+        }
+      },
+      {
+        $group: {
+          _id: "$dateKey",
+          totalQuantity: { $sum: "$quantity" },
+          totalAmount: { $sum: "$totalAmount" }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+    return res.json({
+      year: periodRange.year,
+      month: periodRange.month,
+      startDate: periodRange.start.toISOString().slice(0, 10),
+      endDate: periodRange.end.toISOString().slice(0, 10),
+      summary,
+      dailyTrend: dailyTrend.map((d) => ({
+        date: d._id,
+        totalQuantity: Number(d.totalQuantity ?? 0),
+        totalAmount: Number(d.totalAmount ?? 0)
+      }))
+    });
+  } catch (error) {
+    console.error("[reports] getConsumerConsumptionMonthly:", error);
+    return res
+      .status(500)
+      .json({ error: "Failed to fetch consumer consumption", message: error.message });
+  }
+}
+
+async function downloadConsumerConsumptionExcel(req, res) {
+  try {
+    const periodRange = getMonthRange(req.query.year, req.query.month);
+    const normalizedBuyerMobile = normalizeBuyerMobile(req.query.buyerMobile);
+    const pipeline = [
+      {
+        $match: {
+          type: "sale",
+          date: { $gte: periodRange.start, $lte: periodRange.end }
+        }
+      },
+      {
+        $addFields: {
+          normalizedBuyerPhone: {
+            $trim: { input: { $ifNull: ["$buyerPhone", ""] } }
+          }
+        }
+      },
+      { $match: { normalizedBuyerPhone: { $ne: "" } } },
+      ...(normalizedBuyerMobile ? [{ $match: { normalizedBuyerPhone: normalizedBuyerMobile } }] : []),
+      {
+        $group: {
+          _id: "$normalizedBuyerPhone",
+          buyerName: { $first: "$buyer" },
+          totalQuantity: { $sum: "$quantity" },
+          totalAmount: { $sum: "$totalAmount" }
+        }
+      },
+      { $sort: { totalAmount: -1 } }
+    ];
+    const agg = await MilkTransaction.aggregate(pipeline);
+    const consumerPhones = agg.map((e) => e._id);
+    const users = await User.find({
+      mobile: { $in: consumerPhones },
+      role: UserRoles.CONSUMER
+    }).select("name mobile");
+    const nameByMobile = new Map(users.map((u) => [u.mobile, u.name]));
+    const summary = agg.map((e) => {
+      const qty = Number(e.totalQuantity ?? 0);
+      const amt = Number(e.totalAmount ?? 0);
+      return {
+        name: nameByMobile.get(e._id) || e.buyerName || "Unknown",
+        mobile: e._id,
+        totalQuantity: qty,
+        totalAmount: amt,
+        averageRate: qty ? amt / qty : 0
+      };
+    });
+
+    const header = ["S.No.", "Consumer Name", "Mobile", "Total Quantity (L)", "Total Amount (₹)", "Avg Rate (₹/L)"];
+    const rows = summary.map((r, i) => [
+      i + 1,
+      r.name,
+      r.mobile,
+      Number(r.totalQuantity.toFixed(2)),
+      Number(r.totalAmount.toFixed(2)),
+      Number(r.averageRate.toFixed(2))
+    ]);
+    const wsData = [header, ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const colWidths = [{ wch: 6 }, { wch: 22 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 14 }];
+    ws["!cols"] = colWidths;
+    const wb = XLSX.utils.book_new();
+    const sheetName = `Consumer_${periodRange.year}_${String(periodRange.month).padStart(2, "0")}`;
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    if (normalizedBuyerMobile && summary.length > 0) {
+      const detailPipeline = [
+        { $match: { type: "sale", date: { $gte: periodRange.start, $lte: periodRange.end } } },
+        { $addFields: { normalizedBuyerPhone: { $trim: { input: { $ifNull: ["$buyerPhone", ""] } } } } },
+        { $match: { normalizedBuyerPhone: normalizedBuyerMobile } },
+        { $sort: { date: 1 } },
+        { $project: { date: 1, quantity: 1, pricePerLiter: 1, totalAmount: 1 } }
+      ];
+      const detailTx = await MilkTransaction.aggregate(detailPipeline);
+      const detailHeader = ["Date", "Quantity (L)", "Price/L (₹)", "Total (₹)"];
+      const detailRows = detailTx.map((tx) => [
+        tx.date ? new Date(tx.date).toISOString().slice(0, 10) : "",
+        Number(tx.quantity ?? 0).toFixed(2),
+        Number(tx.pricePerLiter ?? 0).toFixed(2),
+        Number(tx.totalAmount ?? 0).toFixed(2)
+      ]);
+      const wsDetail = XLSX.utils.aoa_to_sheet([detailHeader, ...detailRows]);
+      wsDetail["!cols"] = [{ wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+      XLSX.utils.book_append_sheet(wb, wsDetail, "Day_wise_Detail");
+    }
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    const suffix = normalizedBuyerMobile ? `-${(summary[0]?.name || "customer").replace(/\s+/g, "-")}` : "";
+    const filename = `consumer-milk-consumption-${periodRange.year}-${String(periodRange.month).padStart(2, "0")}${suffix}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    return res.send(buf);
+  } catch (error) {
+    console.error("[reports] downloadConsumerConsumptionExcel:", error);
+    return res
+      .status(500)
+      .json({ error: "Failed to export Excel", message: error.message });
+  }
+}
+
+async function downloadConsumerConsumptionPdf(req, res) {
+  try {
+    const periodRange = getMonthRange(req.query.year, req.query.month);
+    const normalizedBuyerMobile = normalizeBuyerMobile(req.query.buyerMobile);
+    const pipeline = [
+      {
+        $match: {
+          type: "sale",
+          date: { $gte: periodRange.start, $lte: periodRange.end }
+        }
+      },
+      {
+        $addFields: {
+          normalizedBuyerPhone: {
+            $trim: { input: { $ifNull: ["$buyerPhone", ""] } }
+          }
+        }
+      },
+      { $match: { normalizedBuyerPhone: { $ne: "" } } },
+      ...(normalizedBuyerMobile ? [{ $match: { normalizedBuyerPhone: normalizedBuyerMobile } }] : []),
+      {
+        $group: {
+          _id: "$normalizedBuyerPhone",
+          buyerName: { $first: "$buyer" },
+          totalQuantity: { $sum: "$quantity" },
+          totalAmount: { $sum: "$totalAmount" }
+        }
+      },
+      { $sort: { totalAmount: -1 } }
+    ];
+    const agg = await MilkTransaction.aggregate(pipeline);
+    const consumerPhones = agg.map((e) => e._id);
+    const users = await User.find({
+      mobile: { $in: consumerPhones },
+      role: UserRoles.CONSUMER
+    }).select("name mobile");
+    const nameByMobile = new Map(users.map((u) => [u.mobile, u.name]));
+    const summary = agg.map((e) => {
+      const qty = Number(e.totalQuantity ?? 0);
+      const amt = Number(e.totalAmount ?? 0);
+      return {
+        name: nameByMobile.get(e._id) || e.buyerName || "Unknown",
+        mobile: e._id,
+        totalQuantity: qty,
+        totalAmount: amt,
+        averageRate: qty ? amt / qty : 0
+      };
+    });
+
+    const doc = new PDFDocument({ margin: 40 });
+    const nameSuffix = normalizedBuyerMobile && summary.length > 0 ? `-${(summary[0].name || "customer").replace(/\s+/g, "-")}` : "";
+    const filename = `consumer-milk-consumption-${periodRange.year}-${String(periodRange.month).padStart(2, "0")}${nameSuffix}.pdf`;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    doc.pipe(res);
+
+    const monthName = new Date(periodRange.year, periodRange.month - 1).toLocaleString("en-IN", { month: "long" });
+    doc.fontSize(16).text(`Consumer Milk Consumption - ${monthName} ${periodRange.year}`, { align: "center" });
+    doc.moveDown();
+    doc.fontSize(10).text(`From ${periodRange.start.toISOString().slice(0, 10)} to ${periodRange.end.toISOString().slice(0, 10)}`, { align: "center" });
+    doc.moveDown(1.5);
+
+    const colWidths = [30, 90, 75, 65, 75, 55];
+    const rowHeight = 22;
+    const headers = ["S.No.", "Consumer Name", "Mobile", "Qty (L)", "Total (₹)", "Avg (₹/L)"];
+    doc.font("Helvetica-Bold").fontSize(9);
+    let y = doc.y;
+    headers.forEach((h, i) => {
+      doc.text(h, 40 + colWidths.slice(0, i).reduce((a, b) => a + b, 0), y, { width: colWidths[i], align: i === 0 ? "center" : "left" });
+    });
+    doc.moveDown(0.5);
+    doc.font("Helvetica").fontSize(9);
+    summary.forEach((r, i) => {
+      const rowY = doc.y;
+      const cells = [
+        String(i + 1),
+        (r.name || "").slice(0, 28),
+        r.mobile || "",
+        r.totalQuantity.toFixed(2),
+        r.totalAmount.toFixed(2),
+        r.averageRate.toFixed(2)
+      ];
+      cells.forEach((cell, ci) => {
+        doc.text(cell, 40 + colWidths.slice(0, ci).reduce((a, b) => a + b, 0), rowY, { width: colWidths[ci], align: ci === 0 ? "center" : "left" });
+      });
+      doc.moveDown(0.4);
+    });
+    if (normalizedBuyerMobile && summary.length > 0) {
+      const detailPipeline = [
+        { $match: { type: "sale", date: { $gte: periodRange.start, $lte: periodRange.end } } },
+        { $addFields: { normalizedBuyerPhone: { $trim: { input: { $ifNull: ["$buyerPhone", ""] } } } } },
+        { $match: { normalizedBuyerPhone: normalizedBuyerMobile } },
+        { $sort: { date: 1 } }
+      ];
+      const detailTx = await MilkTransaction.aggregate(detailPipeline);
+      doc.moveDown(1);
+      doc.fontSize(12).font("Helvetica-Bold").text("Day-wise Detail", { underline: true });
+      doc.moveDown(0.5);
+      doc.font("Helvetica-Bold").fontSize(9);
+      const dCols = [70, 50, 55, 55];
+      const dHeaders = ["Date", "Qty (L)", "Price/L", "Total (₹)"];
+      let dy = doc.y;
+      dHeaders.forEach((h, i) => {
+        doc.text(h, 40 + dCols.slice(0, i).reduce((a, b) => a + b, 0), dy, { width: dCols[i] });
+      });
+      doc.font("Helvetica").fontSize(9);
+      detailTx.forEach((tx) => {
+        doc.moveDown(0.35);
+        const rowY = doc.y;
+        const cells = [
+          tx.date ? new Date(tx.date).toISOString().slice(0, 10) : "",
+          Number(tx.quantity ?? 0).toFixed(2),
+          Number(tx.pricePerLiter ?? 0).toFixed(2),
+          Number(tx.totalAmount ?? 0).toFixed(2)
+        ];
+        cells.forEach((cell, ci) => {
+          doc.text(cell, 40 + dCols.slice(0, ci).reduce((a, b) => a + b, 0), rowY, { width: dCols[ci] });
+        });
+      });
+    }
+    doc.end();
+  } catch (error) {
+    console.error("[reports] downloadConsumerConsumptionPdf:", error);
+    return res
+      .status(500)
+      .json({ error: "Failed to export PDF", message: error.message });
+  }
+}
+
 async function downloadBuyerConsumptionCsv(req, res) {
   try {
     const todayRange = getUtcDayRange(new Date());
@@ -587,6 +908,9 @@ async function downloadBuyerConsumptionCsv(req, res) {
 module.exports = {
   getProfitLoss,
   getDashboardSummary,
+  getConsumerConsumptionMonthly,
+  downloadConsumerConsumptionExcel,
+  downloadConsumerConsumptionPdf,
   downloadBuyerConsumptionCsv
 };
 

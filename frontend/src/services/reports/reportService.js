@@ -23,12 +23,24 @@ export const reportService = {
   getDashboardSummary: async ({ trendPeriod, buyerMobile } = {}) => {
     const query = buildQueryString({ trendPeriod, buyerMobile });
     return apiClient.get(`/reports/dashboard-summary${query}`);
-  }
-,
+  },
+
+  getConsumerConsumptionMonthly: async ({ year, month } = {}) => {
+    const query = buildQueryString({ year, month });
+    return apiClient.get(`/reports/consumer-consumption-monthly${query}`);
+  },
 
   getBuyerConsumptionDownloadUrl: ({ month, year, buyerMobile } = {}) => {
     const query = buildQueryString({ month, year, buyerMobile });
     return `${API_BASE_URL}/reports/buyer-consumption/export${query}`;
-  }
+  },
+
+  getConsumerExportUrl: ({ year, month, format, buyerMobile } = {}) => {
+    const query = buildQueryString({ year, month, buyerMobile });
+    const path = format === 'pdf'
+      ? `/reports/consumer-consumption-monthly/export/pdf${query}`
+      : `/reports/consumer-consumption-monthly/export/excel${query}`;
+    return `${API_BASE_URL}${path}`;
+  },
 };
 
