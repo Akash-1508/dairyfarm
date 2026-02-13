@@ -87,9 +87,12 @@ const signup = async (req, res) => {
     // Use provided role or default to CONSUMER (2)
     const userRole = validatedData.role !== undefined ? validatedData.role : UserRoles.CONSUMER;
     
+    const emailForUser = (validatedData.email && String(validatedData.email).trim())
+      ? String(validatedData.email).trim().toLowerCase()
+      : "";
     const created = await addUser({
       name: validatedData.name,
-      email: validatedData.email || "",
+      email: emailForUser,
       mobile: validatedData.mobile.trim(),
       gender: validatedData.gender,
       address: validatedData.address?.trim(),

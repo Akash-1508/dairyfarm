@@ -10,6 +10,7 @@ if (!ENV_API_BASE_URL || typeof ENV_API_BASE_URL !== 'string' || !ENV_API_BASE_U
   throw new Error('API_BASE_URL is not set. Define it in frontend/.env');
 }
 const API_BASE_URL = ENV_API_BASE_URL.trim();
+console.log('[apiClient] Using API_BASE_URL:', API_BASE_URL);
 
 const AUTH_TOKEN_KEY = '@auth_token';
 

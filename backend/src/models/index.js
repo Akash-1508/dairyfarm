@@ -5,4 +5,5 @@ module.exports = {
   ...require("./users"),
   ...require("./buyers"),
   ...require("./sellers"),
+  ...require("./whatsappMessage"),
 };

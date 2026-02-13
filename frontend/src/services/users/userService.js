@@ -49,5 +49,14 @@ export const userService = {
     const response = await apiClient.patch(`/users/${userId}`, data);
     return response;
   },
+
+  /**
+   * Create admin (only admin/super_admin can call)
+   * @param {Object} data - name, mobile, password, email?, address?, gender?
+   */
+  createAdmin: async (data) => {
+    const response = await apiClient.post("/users/admin", data);
+    return response;
+  },
 };
 

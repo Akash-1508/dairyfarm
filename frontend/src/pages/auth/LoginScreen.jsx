@@ -36,9 +36,9 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
     }
   };
 
-  const goToSignup = () => {
-    onNavigate('Signup');
-  };
+  // const goToSignup = () => {
+  //   onNavigate('Signup');
+  // };
 
   return (
     <View style={styles.container}>
@@ -68,8 +68,8 @@ export default function LoginScreen({ onNavigate, onLoginSuccess }) {
         <TouchableOpacity onPress={() => onNavigate('ForgotPassword')} style={styles.forgotPasswordLink}>
           <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
         </TouchableOpacity>
-        <View style={{ height: 16 }} />
-        <Button title="Go to Signup" onPress={goToSignup} />
+        {/* <View style={{ height: 16 }} />
+        <Button title="Go to Signup" onPress={goToSignup} /> */}
       </ScrollView>
     </View>
   );

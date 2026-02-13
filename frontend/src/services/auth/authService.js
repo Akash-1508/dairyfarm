@@ -37,9 +37,10 @@ export const authService = {
     dailyMilkQuantity,
     role
   ) => {
+    const emailValue = (email != null && String(email).trim()) ? String(email).trim() : '';
     const res = await apiClient.post('/auth/signup', {
       name,
-      email,
+      email: emailValue,
       password,
       mobile,
       gender,

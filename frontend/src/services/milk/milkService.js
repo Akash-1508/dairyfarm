@@ -7,7 +7,7 @@ import { apiClient } from '../api/apiClient';
 
 export const milkService = {
   recordSale: async (transaction) => {
-    const response = await apiClient.post('/milk/sale', {
+    const payload = {
       date: transaction.date.toISOString(),
       quantity: transaction.quantity,
       pricePerLiter: transaction.pricePerLiter,
@@ -16,7 +16,10 @@ export const milkService = {
       buyerPhone: transaction.buyerPhone,
       notes: transaction.notes,
       fixedPrice: transaction.fixedPrice,
-    });
+    };
+    if (transaction.paymentType) payload.paymentType = transaction.paymentType;
+    if (transaction.amountReceived != null) payload.amountReceived = transaction.amountReceived;
+    const response = await apiClient.post('/milk/sale', payload);
     
     // Convert date string back to Date object
     return {
@@ -26,7 +29,7 @@ export const milkService = {
   },
 
   recordPurchase: async (transaction) => {
-    const response = await apiClient.post('/milk/purchase', {
+    const payload = {
       date: transaction.date.toISOString(),
       quantity: transaction.quantity,
       pricePerLiter: transaction.pricePerLiter,
@@ -34,7 +37,10 @@ export const milkService = {
       seller: transaction.seller,
       sellerPhone: transaction.sellerPhone,
       notes: transaction.notes,
-    });
+    };
+    if (transaction.paymentType) payload.paymentType = transaction.paymentType;
+    if (transaction.amountReceived != null) payload.amountReceived = transaction.amountReceived;
+    const response = await apiClient.post('/milk/purchase', payload);
     
     // Convert date string back to Date object
     return {

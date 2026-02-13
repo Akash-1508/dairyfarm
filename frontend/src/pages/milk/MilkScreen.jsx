@@ -48,6 +48,8 @@ export default function MilkScreen({ onNavigate, onLogout }) {
     contactName: '',
     contactPhone: '',
     notes: '',
+    paymentType: 'cash',
+    amountReceived: '',
   });
 
   // Load transactions, buyers, and sellers on mount
@@ -205,6 +207,14 @@ export default function MilkScreen({ onNavigate, onLogout }) {
       return;
     }
 
+    if (formData.paymentType === 'cash') {
+      const amt = parseFloat(formData.amountReceived);
+      if (!formData.amountReceived || isNaN(amt) || amt < 0) {
+        Alert.alert('Error', 'Please enter amount received (Cash)');
+        return;
+      }
+    }
+
     try {
       setLoading(true);
       const totalAmount = quantity * pricePerLiter;
@@ -232,7 +242,10 @@ export default function MilkScreen({ onNavigate, onLogout }) {
         [transactionType === 'sale' ? 'buyer' : 'seller']: formData.contactName,
         [transactionType === 'sale' ? 'buyerPhone' : 'sellerPhone']: formData.contactPhone || undefined,
         notes: formData.notes,
-        fixedPrice: fixedPrice, // Save fixed price in transaction for reference
+        fixedPrice: fixedPrice,
+        paymentType: formData.paymentType || 'cash',
+        amountReceived: formData.paymentType === 'cash' && formData.amountReceived
+          ? parseFloat(formData.amountReceived) : undefined,
       };
 
       let savedTransaction;
@@ -250,9 +263,11 @@ export default function MilkScreen({ onNavigate, onLogout }) {
         date: new Date().toISOString().split('T')[0],
         quantity: '',
         pricePerLiter: '',
-        contactName: formData.contactName, // Keep contact name
-        contactPhone: formData.contactPhone, // Keep contact phone
+        contactName: formData.contactName,
+        contactPhone: formData.contactPhone,
         notes: '',
+        paymentType: 'cash',
+        amountReceived: '',
       });
       setShowForm(false);
       Alert.alert('Success', `Milk ${transactionType === 'sale' ? 'sale' : 'purchase'} saved to database!`);
@@ -906,6 +921,8 @@ export default function MilkScreen({ onNavigate, onLogout }) {
                         contactName: selectedBuyer.name,
                         contactPhone: selectedBuyer.mobile || '',
                         notes: '',
+                        paymentType: 'cash',
+                        amountReceived: '',
                       });
                       
                       setShowBuyerList(false);
@@ -1092,6 +1109,8 @@ export default function MilkScreen({ onNavigate, onLogout }) {
                         contactName: selectedSeller.name,
                         contactPhone: selectedSeller.mobile || '',
                         notes: '',
+                        paymentType: 'cash',
+                        amountReceived: '',
                       });
                       
                       setShowSellerList(false);
@@ -1295,6 +1314,47 @@ export default function MilkScreen({ onNavigate, onLogout }) {
                     {formatCurrency(parseFloat(formData.quantity || '0') * parseFloat(formData.pricePerLiter || '0'))}
                   </Text>
                 </View>
+              )}
+
+              <Text style={styles.label}>Payment</Text>
+              <View style={styles.paymentTypeRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.paymentTypeButton,
+                    formData.paymentType === 'cash' && styles.paymentTypeButtonActive,
+                  ]}
+                  onPress={() => setFormData({ ...formData, paymentType: 'cash', amountReceived: formData.amountReceived || '' })}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.paymentTypeButtonText, formData.paymentType === 'cash' && styles.paymentTypeButtonTextActive]}>
+                    💵 Cash
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.paymentTypeButton,
+                    formData.paymentType === 'credit' && styles.paymentTypeButtonActive,
+                  ]}
+                  onPress={() => setFormData({ ...formData, paymentType: 'credit', amountReceived: '' })}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.paymentTypeButtonText, formData.paymentType === 'credit' && styles.paymentTypeButtonTextActive]}>
+                    📋 Credit
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {formData.paymentType === 'cash' && (
+                <>
+                  <Text style={styles.label}>Amount Received (₹) *</Text>
+                  <Input
+                    placeholder="Enter amount received in cash"
+                    value={formData.amountReceived}
+                    onChangeText={(text) => setFormData({ ...formData, amountReceived: text })}
+                    keyboardType="decimal-pad"
+                    style={styles.input}
+                  />
+                </>
               )}
 
               <Text style={styles.label}>{transactionType === 'sale' ? 'Buyer' : 'Seller'} Phone</Text>
@@ -1610,6 +1670,33 @@ const styles = StyleSheet.create({
   },
   saveButtonSale: {
     backgroundColor: '#2196F3',
+  },
+  paymentTypeRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  paymentTypeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#F0F0F0',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  paymentTypeButtonActive: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  paymentTypeButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#666',
+  },
+  paymentTypeButtonTextActive: {
+    color: '#FFFFFF',
   },
   contactInputContainer: {
     marginBottom: 12,

@@ -54,6 +54,18 @@ const MilkTransactionSchema = new mongoose.Schema({
     type: Number,
     required: false,
     min: 0
+  },
+  paymentType: {
+    type: String,
+    enum: ["cash", "credit"],
+    required: false,
+    default: "cash",
+    trim: true
+  },
+  amountReceived: {
+    type: Number,
+    required: false,
+    min: 0
   }
 }, {
   timestamps: true,

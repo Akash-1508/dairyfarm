@@ -11,7 +11,9 @@ const milkTxSchema = z.object({
   seller: z.string().optional(),
   sellerPhone: z.string().optional(),
   notes: z.string().optional(),
-  fixedPrice: z.number().nonnegative().optional() // Buyer's fixed price for reference
+  fixedPrice: z.number().nonnegative().optional(),
+  paymentType: z.enum(["cash", "credit"]).optional(),
+  amountReceived: z.number().nonnegative().optional()
 });
 
 const listMilkTransactions = async (req, res) => {

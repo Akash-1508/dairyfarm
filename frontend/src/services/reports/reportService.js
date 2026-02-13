@@ -36,7 +36,18 @@ export const reportService = {
   },
 
   getConsumerExportUrl: ({ year, month, format, buyerMobile } = {}) => {
-    const query = buildQueryString({ year, month, buyerMobile });
+    const params = { year, month };
+    if (buyerMobile != null && String(buyerMobile).trim() !== '') {
+      params.buyerMobile = String(buyerMobile).trim();
+    } else {
+      params.allConsumers = '1';
+    }
+    const now = new Date();
+    const isCurrentMonth = Number(year) === now.getFullYear() && Number(month) === now.getMonth() + 1;
+    if (isCurrentMonth) {
+      params.upToToday = '1';
+    }
+    const query = buildQueryString(params);
     const path = format === 'pdf'
       ? `/reports/consumer-consumption-monthly/export/pdf${query}`
       : `/reports/consumer-consumption-monthly/export/excel${query}`;

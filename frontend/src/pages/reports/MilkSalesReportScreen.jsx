@@ -6,10 +6,10 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Share,
   ActivityIndicator,
   Modal,
   FlatList,
+  Platform,
 } from 'react-native';
 import HeaderWithMenu from '../../components/common/HeaderWithMenu';
 import Input from '../../components/common/Input';
@@ -20,6 +20,7 @@ import { buyerService } from '../../services/buyers/buyerService';
 import { reportService } from '../../services/reports/reportService';
 import { getAuthToken } from '../../services/api/apiClient';
 import ReactNativeBlobUtil from 'react-native-blob-util';
+import RNShare from 'react-native-share';
 
 /**
  * Milk Sales Report Screen
@@ -69,30 +70,68 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
         Alert.alert('Error', 'Please log in to download.');
         return;
       }
+      const normalizedBuyerMobile = buyerMobile ? String(buyerMobile).trim() || undefined : undefined;
       const url = reportService.getConsumerExportUrl({
         year: reportYear,
         month: reportMonth,
         format: format === 'pdf' ? 'pdf' : 'excel',
-        buyerMobile: buyerMobile || undefined,
+        buyerMobile: normalizedBuyerMobile,
       });
       const ext = format === 'pdf' ? 'pdf' : 'xlsx';
-      const filename = `consumer-milk-${reportYear}-${String(reportMonth).padStart(2, '0')}.${ext}`;
+      const filename = `consumer-milk-${reportYear}-${String(reportMonth).padStart(2, '0')}${normalizedBuyerMobile ? `-${normalizedBuyerMobile}` : ''}.${ext}`;
+      const mimeType = format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      const cachePath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${filename}`;
       const res = await ReactNativeBlobUtil.config({
         fileCache: true,
+        path: cachePath,
         addAndroidDownloads: { useDownloadManager: true, notification: true, path: ReactNativeBlobUtil.fs.dirs.DownloadDir + '/' + filename },
       }).fetch('GET', url, { Authorization: `Bearer ${token}` });
+
+      const status = res.respInfo?.status ?? res.info?.()?.status;
+      if (status != null && (status < 200 || status >= 300)) {
+        let errMsg = `Download failed (${status}).`;
+        try {
+          const text = await (typeof res.text === 'function' ? res.text() : Promise.resolve(res.data));
+          const body = typeof text === 'string' ? text : String(text);
+          const parsed = body.startsWith('{') ? JSON.parse(body) : null;
+          if (parsed?.error) errMsg = parsed.error;
+          else if (parsed?.message) errMsg = parsed.message;
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
+
       const path = res.path();
+      if (!path || typeof path !== 'string') throw new Error('Download failed: no file received.');
+
       const pathWithScheme = path.startsWith('file://') ? path : `file://${path}`;
-      await Share.share({
-        url: pathWithScheme,
-        type: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        title: buyerMobile
-          ? `Milk Report - ${MONTH_NAMES[reportMonth - 1]} ${reportYear}`
-          : `Consumer Milk Report ${MONTH_NAMES[reportMonth - 1]} ${reportYear}`,
-      });
+      const shareTitle = normalizedBuyerMobile
+        ? `Milk Report - ${MONTH_NAMES[reportMonth - 1]} ${reportYear}`
+        : `Consumer Milk Report ${MONTH_NAMES[reportMonth - 1]} ${reportYear}`;
+
+      const shareOptions = {
+        type: mimeType,
+        message: shareTitle,
+        title: shareTitle,
+        filename,
+        failOnCancel: false,
+      };
+
+      if (Platform.OS === 'android') {
+        const base64Data = await ReactNativeBlobUtil.fs.readFile(path, 'base64');
+        const base64Url = `data:${mimeType};base64,${base64Data}`;
+        await RNShare.open({
+          ...shareOptions,
+          url: base64Url,
+          useInternalStorage: true, // Fix for Uri.getScheme() null error on Android 12+
+        });
+      } else {
+        await RNShare.open({ ...shareOptions, url: pathWithScheme });
+      }
     } catch (error) {
       console.error('Download failed:', error);
-      Alert.alert('Error', error.message || 'Download failed. Please try again.');
+      if (error?.message !== 'User did not share') {
+        Alert.alert('Error', error.message || 'Download failed. Please try again.');
+      }
     } finally {
       setDownloadLoading(null);
     }
@@ -249,9 +288,7 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
         {/* Download monthly report - Particular consumer or All */}
         <View style={styles.downloadSection}>
           <Text style={styles.downloadSectionTitle}>Download Monthly Consumer Report</Text>
-          <Text style={styles.downloadSectionSubtext}>
-            Pehle consumer select karein, phir Excel/PDF download karein (sirf usi consumer ki report)
-          </Text>
+        
           <TouchableOpacity
             style={styles.consumerSelectRow}
             onPress={() => setShowConsumerPicker(true)}
@@ -325,7 +362,7 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
           <View style={styles.downloadButtonsRow}>
             <TouchableOpacity
               style={[styles.downloadButton, styles.downloadButtonExcel]}
-              onPress={() => handleDownloadExport('excel', selectedConsumerForDownload?.mobile)}
+              onPress={() => handleDownloadExport('excel', selectedConsumerForDownload ? selectedConsumerForDownload.mobile : null)}
               disabled={downloadLoading != null}
             >
               {(downloadLoading === 'excel' || (selectedConsumerForDownload && downloadLoading === `excel-${selectedConsumerForDownload.mobile}`)) ? (
@@ -336,7 +373,7 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.downloadButton, styles.downloadButtonPdf]}
-              onPress={() => handleDownloadExport('pdf', selectedConsumerForDownload?.mobile)}
+              onPress={() => handleDownloadExport('pdf', selectedConsumerForDownload ? selectedConsumerForDownload.mobile : null)}
               disabled={downloadLoading != null}
             >
               {(downloadLoading === 'pdf' || (selectedConsumerForDownload && downloadLoading === `pdf-${selectedConsumerForDownload.mobile}`)) ? (
@@ -382,11 +419,10 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
           )}
         </View>
 
-        {/* Flow Chart */}
-        <View style={styles.flowChartContainer}>
+        {/* Flow Chart - commented out */}
+        {/* <View style={styles.flowChartContainer}>
           <Text style={styles.sectionTitle}>Milk Sales Flow Chart</Text>
           <View style={styles.flowChart}>
-            {/* Source */}
             <View style={styles.flowNode}>
               <View style={[styles.flowNodeBox, styles.flowNodeSource]}>
                 <Text style={styles.flowNodeIcon}>🐄</Text>
@@ -394,8 +430,6 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
                 <Text style={styles.flowNodeSubtitle}>Milk Source</Text>
               </View>
             </View>
-
-            {/* Arrow Down */}
             <View style={styles.flowArrowContainer}>
               <View style={styles.flowArrowLine} />
               <Text style={styles.flowArrowText}>↓</Text>
@@ -403,8 +437,6 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
                 {overallStats.totalQuantity.toFixed(2)} L Total
               </Text>
             </View>
-
-            {/* Sales Center */}
             <View style={styles.flowNode}>
               <View style={[styles.flowNodeBox, styles.flowNodeCenter]}>
                 <Text style={styles.flowNodeIcon}>💰</Text>
@@ -417,8 +449,6 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
                 </Text>
               </View>
             </View>
-
-            {/* Arrow Down */}
             <View style={styles.flowArrowContainer}>
               <View style={styles.flowArrowLine} />
               <Text style={styles.flowArrowText}>↓</Text>
@@ -426,12 +456,10 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
                 {overallStats.totalBuyers} Buyers
               </Text>
             </View>
-
-            {/* Buyers Grid */}
             <View style={styles.flowBuyersGrid}>
               {filteredBuyerSales
                 .sort((a, b) => b.totalAmount - a.totalAmount)
-                .slice(0, 6) // Show top 6 buyers in flow chart
+                .slice(0, 6)
                 .map((buyer, index) => (
                   <View key={index} style={styles.flowBuyerNode}>
                     <View style={[styles.flowNodeBox, styles.flowNodeBuyer]}>
@@ -449,8 +477,6 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
                   </View>
                 ))}
             </View>
-
-            {/* Summary at bottom */}
             <View style={styles.flowSummary}>
               <View style={styles.flowSummaryItem}>
                 <Text style={styles.flowSummaryLabel}>Total Buyers</Text>
@@ -470,7 +496,7 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
               </View>
             </View>
           </View>
-        </View>
+        </View> */}
 
         {/* Buyer-wise Breakdown */}
         <View style={styles.buyerBreakdownContainer}>

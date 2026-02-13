@@ -24,9 +24,10 @@
     "mongodb": "^7.1.0",
     "mongoose": "^8.20.0",
     "morgan": "^1.10.0",
-    "zod": "^3.23.8",
+    "pdfkit": "^0.15.0",
+    "pdfkit-table": "^0.1.99",
     "xlsx": "^0.18.5",
-    "pdfkit": "^0.15.0"
+    "zod": "^3.23.8"
   },
   "engines": {
     "node": ">=20"

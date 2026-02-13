@@ -88,7 +88,9 @@ const User = mongoose.model('User', UserSchema);
 
 // Helper functions
 async function findUserByEmail(email) {
-  const needle = email.trim().toLowerCase();
+  if (email == null || typeof email !== 'string') return null;
+  const needle = String(email).trim().toLowerCase();
+  if (!needle) return null;
   return await User.findOne({ email: needle });
 }
 
@@ -99,9 +101,12 @@ async function findUserByMobile(mobile) {
 }
 
 async function assertUserUnique(email, mobile) {
-  const existingByEmail = await findUserByEmail(email);
-  if (existingByEmail) {
-    throw new Error("Email already in use");
+  const emailStr = (email != null && typeof email === 'string') ? String(email).trim() : '';
+  if (emailStr) {
+    const existingByEmail = await findUserByEmail(emailStr);
+    if (existingByEmail) {
+      throw new Error("Email already in use");
+    }
   }
   if (mobile && mobile.trim()) {
     const existingByMobile = await findUserByMobile(mobile);
@@ -143,6 +148,10 @@ async function updateUser(userId, updates) {
   if (updates.email !== undefined) user.email = (updates.email || "").trim().toLowerCase();
   if (updates.address !== undefined) user.address = (updates.address || "").trim();
   if (updates.isActive !== undefined) user.isActive = !!updates.isActive;
+  // Allow demoting admin (1) to consumer (2) only
+  if (updates.role !== undefined && user.role === UserRoles.ADMIN && Number(updates.role) === UserRoles.CONSUMER) {
+    user.role = UserRoles.CONSUMER;
+  }
   if (updates.mobile !== undefined) {
     const mobile = updates.mobile.trim();
     if (!/^[0-9]{10}$/.test(mobile)) throw new Error("Invalid mobile number");

@@ -1,4 +1,5 @@
-const { getUsersByRole, updateUser: updateUserModel, User, UserRoles } = require("../models/users");
+const crypto = require("crypto");
+const { getUsersByRole, addUser, updateUser: updateUserModel, User, UserRoles } = require("../models/users");
 const { findBuyerByUserId, updateBuyer } = require("../models/buyers");
 
 /**
@@ -46,12 +47,24 @@ const updateUser = async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
+    if (user.role === UserRoles.SUPER_ADMIN) {
+      return res.status(403).json({ error: "Cannot modify super admin" });
+    }
+    if (req.user?.userId && req.user.userId === userId.toString()) {
+      if (body.role !== undefined && body.role === UserRoles.CONSUMER) {
+        return res.status(403).json({ error: "Cannot remove your own admin access" });
+      }
+      if (body.isActive === false) {
+        return res.status(403).json({ error: "Cannot deactivate your own account" });
+      }
+    }
     const updates = {};
     if (body.name !== undefined) updates.name = body.name;
     if (body.email !== undefined) updates.email = body.email;
     if (body.mobile !== undefined) updates.mobile = body.mobile;
     if (body.address !== undefined) updates.address = body.address;
     if (body.isActive !== undefined) updates.isActive = body.isActive;
+    if (body.role !== undefined) updates.role = body.role;
     await updateUserModel(userId, updates);
     // If consumer (buyer), update buyer record name/rate/quantity
     if (user.role === UserRoles.CONSUMER) {
@@ -80,5 +93,49 @@ const updateUser = async (req, res) => {
   }
 };
 
-module.exports = { getUsers, updateUser };
+/**
+ * Add Admin - Only admin/super_admin can create new admin
+ * POST /users/admin
+ * Body: { name, mobile, password, email?, address?, gender? }
+ */
+const addAdmin = async (req, res) => {
+  try {
+    const { name, mobile, password, email, address, gender } = req.body || {};
+    if (!name || !mobile || !password) {
+      return res.status(400).json({ error: "Name, mobile and password are required" });
+    }
+    const trimmedMobile = String(mobile).trim();
+    if (!/^[0-9]{10}$/.test(trimmedMobile)) {
+      return res.status(400).json({ error: "Mobile must be exactly 10 digits" });
+    }
+    if (String(password).length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+    const salt = crypto.randomBytes(16).toString("hex");
+    const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+    const passwordHash = `${salt}:${hash}`;
+    const created = await addUser({
+      name: String(name).trim(),
+      email: (email && String(email).trim()) || "",
+      mobile: trimmedMobile,
+      gender: ["male", "female", "other"].includes(gender) ? gender : undefined,
+      address: (address && String(address).trim()) || undefined,
+      role: UserRoles.ADMIN,
+      passwordHash,
+      isActive: true,
+    });
+    const { passwordHash: _, ...safe } = created.toObject();
+    safe._id = safe._id.toString();
+    return res.status(201).json(safe);
+  } catch (error) {
+    const msg = error.message || "Failed to create admin";
+    if (msg.includes("already in use")) {
+      return res.status(409).json({ error: msg });
+    }
+    console.error("[users] Error adding admin:", error);
+    return res.status(500).json({ error: msg });
+  }
+};
+
+module.exports = { getUsers, updateUser, addAdmin };
 

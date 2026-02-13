@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,11 @@ import {
   Dimensions,
   ScrollView,
 } from 'react-native';
+import { authService } from '../../services/auth/authService';
 
 const { width } = Dimensions.get('window');
 
-const menuItems = [
+const baseMenuItems = [
   { id: 1, title: 'Dashboard', icon: '📊' },
   { id: 2, title: 'Animals', icon: '🐄' },
   { id: 3, title: 'Milk', icon: '🥛' },
@@ -24,6 +25,25 @@ const menuItems = [
 ];
 
 export default function HeaderWithMenu({ title, subtitle, onNavigate, isAuthenticated = false, onLogout }) {
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const load = async () => {
+      const user = await authService.getCurrentUser();
+      setCurrentUser(user);
+    };
+    load();
+  }, [isAuthenticated]);
+
+  const isAdmin = currentUser?.role === 0 || currentUser?.role === 1;
+  const menuItems = [
+    ...baseMenuItems,
+    ...(isAdmin ? [
+      { id: 9, title: 'Admin List', icon: '👥' },
+      { id: 10, title: 'Add Admin', icon: '👤' },
+    ] : []),
+  ];
   const [showDrawer, setShowDrawer] = useState(false);
   const slideAnim = useRef(new Animated.Value(-width)).current;
 
