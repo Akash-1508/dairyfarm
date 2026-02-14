@@ -12,8 +12,8 @@ const signupSchema = z.object({
     .string()
     .optional()
     .refine(
-      (val) => !val || val.trim() === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim()),
-      "Invalid email format"
+      (val) => !val || val.trim() === "" || val.trim().includes('@'),
+      "Email must contain @ symbol"
     )
     .transform((val) => val && val.trim() ? val.toLowerCase().trim() : ""),
   password: z

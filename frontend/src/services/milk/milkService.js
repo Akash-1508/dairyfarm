@@ -59,6 +59,37 @@ export const milkService = {
     }));
   },
 
+  updateTransaction: async (transactionId, transaction) => {
+    const payload = {
+      date: transaction.date.toISOString(),
+      quantity: transaction.quantity,
+      pricePerLiter: transaction.pricePerLiter,
+      totalAmount: transaction.totalAmount,
+      notes: transaction.notes,
+    };
+    
+    // Add buyer/seller fields based on transaction type
+    if (transaction.type === 'sale') {
+      payload.buyer = transaction.buyer;
+      payload.buyerPhone = transaction.buyerPhone;
+      if (transaction.fixedPrice) payload.fixedPrice = transaction.fixedPrice;
+    } else {
+      payload.seller = transaction.seller;
+      payload.sellerPhone = transaction.sellerPhone;
+    }
+    
+    if (transaction.paymentType) payload.paymentType = transaction.paymentType;
+    if (transaction.amountReceived != null) payload.amountReceived = transaction.amountReceived;
+    
+    const response = await apiClient.patch(`/milk/${transactionId}`, payload);
+    
+    // Convert date string back to Date object
+    return {
+      ...response,
+      date: new Date(response.date),
+    };
+  },
+
   deleteTransaction: async (id) => {
     await apiClient.delete(`/milk/${id}`);
   },

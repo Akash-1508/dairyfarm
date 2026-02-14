@@ -195,6 +195,12 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       return;
     }
 
+    // Email validation - if provided, must contain @
+    if (formData.email && formData.email.trim() && !formData.email.trim().includes('@')) {
+      Alert.alert('Error', 'Email must contain @ symbol');
+      return;
+    }
+
     try {
       setLoading(true);
       // Parse fixed price and daily quantity, only if not empty

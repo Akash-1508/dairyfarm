@@ -51,6 +51,11 @@ export default function AddAdminScreen({ onNavigate, onLogout }) {
       Alert.alert('Error', 'Mobile must be exactly 10 digits');
       return;
     }
+    // Email validation - if provided, must contain @
+    if (email && email.trim() && !email.trim().includes('@')) {
+      Alert.alert('Error', 'Email must contain @ symbol');
+      return;
+    }
     if (password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match');
       return;

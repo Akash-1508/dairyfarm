@@ -48,6 +48,12 @@ export default function SignupScreen({ onNavigate }) {
       return;
     }
 
+    // Email validation - if provided, must contain @
+    if (email && email.trim() && !email.trim().includes('@')) {
+      Alert.alert('Error', 'Email must contain @ symbol');
+      return;
+    }
+
     // Validate password match
     if (password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match');

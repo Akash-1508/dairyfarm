@@ -48,7 +48,19 @@ export default function AdminListScreen({ onNavigate, onLogout }) {
     try {
       setLoading(true);
       const list = await userService.getUsersByRole(ROLE_ADMIN);
-      setAdmins(Array.isArray(list) ? list : []);
+      console.log('[AdminList] Loaded admins:', list);
+      const adminsList = Array.isArray(list) ? list : [];
+      // Log each admin's data for debugging
+      adminsList.forEach((admin, index) => {
+        console.log(`[AdminList] Admin ${index + 1}:`, {
+          _id: admin._id,
+          name: admin.name,
+          mobile: admin.mobile,
+          email: admin.email,
+          isActive: admin.isActive
+        });
+      });
+      setAdmins(adminsList);
     } catch (e) {
       console.error('[AdminList] Load error:', e);
       Alert.alert('Error', e?.message || 'Failed to load admins');
@@ -178,9 +190,15 @@ export default function AdminListScreen({ onNavigate, onLogout }) {
               <View style={styles.cardHeader}>
                 <View style={styles.cardInfo}>
                   <Text style={styles.cardName} numberOfLines={2}>
-                    {admin.name || admin.mobile || 'Admin'}
+                    {admin.name || 'Admin (No Name)'}
                   </Text>
-                  {admin.mobile ? <Text style={styles.cardMobile}>{admin.mobile}</Text> : null}
+                  {admin.mobile ? (
+                    <Text style={styles.cardMobile}>{admin.mobile}</Text>
+                  ) : (
+                    <Text style={[styles.cardMobile, { color: '#999', fontStyle: 'italic' }]}>
+                      Mobile: Not Available
+                    </Text>
+                  )}
                   {admin.email ? <Text style={styles.cardEmail} numberOfLines={1}>{admin.email}</Text> : null}
                 </View>
                 <View style={[styles.statusBadge, admin.isActive !== false ? styles.statusActive : styles.statusInactive]}>

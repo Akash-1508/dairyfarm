@@ -104,8 +104,27 @@ async function addMilkTransaction(transactionData) {
   return await transaction.save();
 }
 
+async function getMilkTransactionById(transactionId) {
+  return await MilkTransaction.findById(transactionId);
+}
+
+async function updateMilkTransaction(transactionId, updates) {
+  return await MilkTransaction.findByIdAndUpdate(
+    transactionId,
+    { $set: updates },
+    { new: true, runValidators: true }
+  );
+}
+
+async function deleteMilkTransaction(transactionId) {
+  return await MilkTransaction.findByIdAndDelete(transactionId);
+}
+
 module.exports = {
   MilkTransaction,
   getAllMilkTransactions,
   addMilkTransaction,
+  getMilkTransactionById,
+  updateMilkTransaction,
+  deleteMilkTransaction,
 };
