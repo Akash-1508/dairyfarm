@@ -82,17 +82,22 @@ export const authService = {
     return null;
   },
 
-  forgotPassword: async (mobile) => {
-    const res = await apiClient.post('/auth/forgot-password', { mobile });
+  forgotPassword: async (emailOrMobile) => {
+    const res = await apiClient.post('/auth/forgot-password', { emailOrMobile });
     return res;
   },
 
-  resetPassword: async (mobile, otp, newPassword) => {
+  resetPassword: async (emailOrMobile, otp, newPassword) => {
     const res = await apiClient.post('/auth/reset-password', {
-      mobile,
+      emailOrMobile,
       otp,
       newPassword,
     });
+    return res;
+  },
+
+  resendOtp: async (emailOrMobile) => {
+    const res = await apiClient.post('/auth/resend-otp', { emailOrMobile });
     return res;
   },
 };

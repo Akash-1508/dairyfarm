@@ -3,7 +3,7 @@
  * In production, use Redis or database for distributed systems
  */
 
-// Store: { emailOrMobile: { otp: string, expiresAt: number, userId: string } }
+// Store: key (email or mobile) -> { otp, expiresAt, userId, keys: [mobile, email?] }
 const otpStore = new Map();
 
 // OTP expiry time: 10 minutes
@@ -17,26 +17,34 @@ function generateOTP() {
 }
 
 /**
- * Store OTP for email/mobile
+ * Store OTP for a single key (email or mobile) - backward compatible
  */
 function storeOTP(emailOrMobile, userId) {
+  return storeOTPForUser(emailOrMobile, null, userId);
+}
+
+/**
+ * Store OTP for user - under both mobile and email so reset works with either
+ * @param {string} mobile - User's 10-digit mobile
+ * @param {string|null} email - User's email (optional)
+ * @param {string} userId - User id
+ * @returns {string} generated 4-digit OTP
+ */
+function storeOTPForUser(mobile, email, userId) {
   const otp = generateOTP();
   const expiresAt = Date.now() + OTP_EXPIRY_MS;
-  
-  otpStore.set(emailOrMobile, {
-    otp,
-    expiresAt,
-    userId,
-  });
-  
-  // Clean up expired OTPs
+  const keys = [mobile];
+  if (email && String(email).trim()) {
+    keys.push(String(email).trim().toLowerCase());
+  }
+  const data = { otp, expiresAt, userId, keys };
+  keys.forEach((k) => otpStore.set(k, data));
   cleanupExpiredOTPs();
-  
   return otp;
 }
 
 /**
- * Verify OTP for email/mobile
+ * Verify OTP for email or mobile
  */
 function verifyOTP(emailOrMobile, otp) {
   const stored = otpStore.get(emailOrMobile);
@@ -46,7 +54,8 @@ function verifyOTP(emailOrMobile, otp) {
   }
   
   if (Date.now() > stored.expiresAt) {
-    otpStore.delete(emailOrMobile);
+    if (stored.keys) stored.keys.forEach((k) => otpStore.delete(k));
+    else otpStore.delete(emailOrMobile);
     return { valid: false, error: "OTP expired" };
   }
   
@@ -54,9 +63,9 @@ function verifyOTP(emailOrMobile, otp) {
     return { valid: false, error: "Invalid OTP" };
   }
   
-  // OTP is valid, return userId and delete OTP
   const userId = stored.userId;
-  otpStore.delete(emailOrMobile);
+  if (stored.keys) stored.keys.forEach((k) => otpStore.delete(k));
+  else otpStore.delete(emailOrMobile);
   
   return { valid: true, userId };
 }
@@ -68,7 +77,8 @@ function cleanupExpiredOTPs() {
   const now = Date.now();
   for (const [key, value] of otpStore.entries()) {
     if (now > value.expiresAt) {
-      otpStore.delete(key);
+      if (value.keys) value.keys.forEach((k) => otpStore.delete(k));
+      else otpStore.delete(key);
     }
   }
 }
@@ -78,11 +88,10 @@ function cleanupExpiredOTPs() {
  */
 function getStoredOTP(emailOrMobile) {
   const stored = otpStore.get(emailOrMobile);
-  if (!stored) {
-    return null;
-  }
+  if (!stored) return null;
   if (Date.now() > stored.expiresAt) {
-    otpStore.delete(emailOrMobile);
+    if (stored.keys) stored.keys.forEach((k) => otpStore.delete(k));
+    else otpStore.delete(emailOrMobile);
     return null;
   }
   return stored.otp;
@@ -109,6 +118,7 @@ function getAllStoredOTPs() {
 
 module.exports = {
   storeOTP,
+  storeOTPForUser,
   verifyOTP,
   getStoredOTP, // For development only
   getAllStoredOTPs, // For debugging - development only

@@ -284,6 +284,9 @@ async function getDashboardSummary(req, res) {
     const monthlyStart = new Date(
       Date.UTC(todayRange.start.getUTCFullYear(), todayRange.start.getUTCMonth(), 1)
     );
+    const yearlyStart = new Date(
+      Date.UTC(todayRange.start.getUTCFullYear(), 0, 1)
+    );
 
     const normalizedBuyerMobile = normalizeBuyerMobile(req.query.buyerMobile);
 
@@ -394,6 +397,48 @@ async function getDashboardSummary(req, res) {
 
     const trendSeries = buildTrendSeries(rawTrend, trendConfig);
 
+    // Yearly sales total
+    const [yearlySalesResult] = await MilkTransaction.aggregate([
+      {
+        $match: {
+          type: "sale",
+          date: { $gte: yearlyStart, $lte: todayRange.end }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalQuantity: { $sum: "$quantity" },
+          totalAmount: { $sum: "$totalAmount" },
+          transactionCount: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Monthly sales by milk source (Cow, Buffalo, Sheep, Goat)
+    const monthlySalesByMilkSource = await MilkTransaction.aggregate([
+      {
+        $match: {
+          type: "sale",
+          date: { $gte: monthlyStart, $lte: todayRange.end }
+        }
+      },
+      {
+        $addFields: {
+          source: { $ifNull: ["$milkSource", "cow"] }
+        }
+      },
+      {
+        $group: {
+          _id: "$source",
+          totalQuantity: { $sum: "$quantity" },
+          totalAmount: { $sum: "$totalAmount" },
+          transactionCount: { $sum: 1 }
+        }
+      },
+      { $sort: { totalAmount: -1 } }
+    ]);
+
     const consumerPhones = userConsumptionAgg.map((entry) => entry._id);
     const consumers = await User.find({
       mobile: { $in: consumerPhones },
@@ -458,6 +503,75 @@ async function getDashboardSummary(req, res) {
       };
     }
 
+    const milkSourceLabels = { cow: "Cow", buffalo: "Buffalo", sheep: "Sheep", goat: "Goat" };
+    const sourceMap = new Map(
+      monthlySalesByMilkSource.map((entry) => [
+        entry._id,
+        {
+          milkSource: entry._id,
+          label: milkSourceLabels[entry._id] || entry._id,
+          quantity: Number(entry.totalQuantity ?? 0),
+          amount: Number(entry.totalAmount ?? 0),
+          transactions: Number(entry.transactionCount ?? 0)
+        }
+      ])
+    );
+    // Always return all 4 milk sources (with 0 for missing)
+    const salesByMilkSource = ["cow", "buffalo", "sheep", "goat"].map((src) =>
+      sourceMap.get(src) || {
+        milkSource: src,
+        label: milkSourceLabels[src] || src,
+        quantity: 0,
+        amount: 0,
+        transactions: 0
+      }
+    );
+
+    // Yearly sales by milk source
+    const yearlySalesByMilkSource = await MilkTransaction.aggregate([
+      {
+        $match: {
+          type: "sale",
+          date: { $gte: yearlyStart, $lte: todayRange.end }
+        }
+      },
+      {
+        $addFields: {
+          source: { $ifNull: ["$milkSource", "cow"] }
+        }
+      },
+      {
+        $group: {
+          _id: "$source",
+          totalQuantity: { $sum: "$quantity" },
+          totalAmount: { $sum: "$totalAmount" },
+          transactionCount: { $sum: 1 }
+        }
+      },
+      { $sort: { totalAmount: -1 } }
+    ]);
+    const yearlySourceMap = new Map(
+      yearlySalesByMilkSource.map((entry) => [
+        entry._id,
+        {
+          milkSource: entry._id,
+          label: milkSourceLabels[entry._id] || entry._id,
+          quantity: Number(entry.totalQuantity ?? 0),
+          amount: Number(entry.totalAmount ?? 0),
+          transactions: Number(entry.transactionCount ?? 0)
+        }
+      ])
+    );
+    const yearlySalesByMilkSourceList = ["cow", "buffalo", "sheep", "goat"].map((src) =>
+      yearlySourceMap.get(src) || {
+        milkSource: src,
+        label: milkSourceLabels[src] || src,
+        quantity: 0,
+        amount: 0,
+        transactions: 0
+      }
+    );
+
     const dashboardSummary = {
       generatedAt: new Date().toISOString(),
       dailyExpenses: Number(
@@ -477,7 +591,14 @@ async function getDashboardSummary(req, res) {
         amount: Number(monthlySalesResult?.totalAmount ?? 0),
         transactions: Number(monthlySalesResult?.transactionCount ?? 0)
       },
+      yearlySales: {
+        quantity: Number(yearlySalesResult?.totalQuantity ?? 0),
+        amount: Number(yearlySalesResult?.totalAmount ?? 0),
+        transactions: Number(yearlySalesResult?.transactionCount ?? 0)
+      },
       userConsumptions,
+      salesByMilkSource,
+      yearlySalesByMilkSource: yearlySalesByMilkSourceList,
       salesTrend: trendSeries,
       selectedBuyer,
       trendMetadata: {

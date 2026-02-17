@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import HeaderWithMenu from '../../components/common/HeaderWithMenu';
 import { reportService } from '../../services/reports/reportService';
+import { paymentService } from '../../services/payments/paymentService';
 
 const formatCurrency = (value) => {
   const amount = Number(value ?? 0);
@@ -34,6 +35,7 @@ const trendOptions = [
 
 export default function DashboardScreen({ onNavigate, onLogout }) {
   const [summary, setSummary] = useState(null);
+  const [paymentSummary, setPaymentSummary] = useState({ daily: 0, monthly: 0, yearly: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [trendPeriod, setTrendPeriod] = useState('weekly');
@@ -74,6 +76,62 @@ export default function DashboardScreen({ onNavigate, onLogout }) {
       isMounted = false;
     };
   }, [trendPeriod, selectedBuyerMobile]);
+
+  // Fetch payment summary
+  useEffect(() => {
+    let isMounted = true;
+    const fetchPaymentSummary = async () => {
+      try {
+        const payments = await paymentService.getPayments();
+        if (!isMounted) return;
+
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const yearStart = new Date(now.getFullYear(), 0, 1);
+
+        let dailyTotal = 0;
+        let monthlyTotal = 0;
+        let yearlyTotal = 0;
+
+        payments.forEach((payment) => {
+          const paymentDate = new Date(payment.paymentDate);
+          const amount = Number(payment.amount) || 0;
+
+          // Only count cash payments
+          if (payment.paymentType === 'cash') {
+            // Daily total
+            if (paymentDate >= todayStart) {
+              dailyTotal += amount;
+            }
+            // Monthly total
+            if (paymentDate >= monthStart) {
+              monthlyTotal += amount;
+            }
+            // Yearly total
+            if (paymentDate >= yearStart) {
+              yearlyTotal += amount;
+            }
+          }
+        });
+
+        if (isMounted) {
+          setPaymentSummary({
+            daily: dailyTotal,
+            monthly: monthlyTotal,
+            yearly: yearlyTotal,
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching payment summary:', err);
+        // Don't show error, just log it
+      }
+    };
+    fetchPaymentSummary();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const salesTrend = summary?.salesTrend ?? [];
   const maxTrendAmount = useMemo(() => {
@@ -127,7 +185,7 @@ export default function DashboardScreen({ onNavigate, onLogout }) {
   return (
     <View style={styles.container}>
       <HeaderWithMenu
-        title="Dairy Farm Management"
+        title="HiTech Dairy Farm"
         subtitle="Dashboard"
         onNavigate={onNavigate}
         isAuthenticated={true}
@@ -189,6 +247,28 @@ export default function DashboardScreen({ onNavigate, onLogout }) {
                 {formatLiters(summary.dailySales?.quantity)}
               </Text>
             </View>
+
+            {summary.salesByMilkSource && (
+              <View style={styles.card}>
+                <Text style={styles.cardHeading}>Monthly Milk Sales by Source</Text>
+                <Text style={styles.overviewMeta}>
+                  Current month: {formatLiters(summary.salesByMilkSource.reduce((s, x) => s + x.quantity, 0))} · {formatCurrency(summary.salesByMilkSource.reduce((s, x) => s + x.amount, 0))}
+                </Text>
+                {summary.salesByMilkSource.map((item) => (
+                  <View key={item.milkSource} style={styles.listRow}>
+                    <View>
+                      <Text style={styles.listTitle}>{item.label}</Text>
+                      <Text style={styles.listSubtitle}>{item.transactions ?? 0} transactions</Text>
+                    </View>
+                    <View style={styles.listValues}>
+                      <Text style={styles.listAmount}>{formatLiters(item.quantity)}</Text>
+                      <Text style={styles.listAmount}>{formatCurrency(item.amount)}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
             <View style={styles.summaryRow}>
               <View style={styles.summaryCard}>
                 <Text style={styles.summaryTitle}>Today's Sales</Text>
@@ -215,6 +295,42 @@ export default function DashboardScreen({ onNavigate, onLogout }) {
 
             <View style={styles.summaryRow}>
               <View style={styles.summaryCard}>
+                <Text style={styles.summaryTitle}>Cash Received (Today)</Text>
+                <Text style={styles.summaryValue}>
+                  {formatCurrency(paymentSummary.daily)}
+                </Text>
+                <Text style={styles.summaryMeta}>Cash payments received today</Text>
+              </View>
+
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryTitle}>Cash Received (Monthly)</Text>
+                <Text style={styles.summaryValue}>
+                  {formatCurrency(paymentSummary.monthly)}
+                </Text>
+                <Text style={styles.summaryMeta}>Cash payments this month</Text>
+              </View>
+            </View>
+
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryTitle}>Cash Received (Yearly)</Text>
+                <Text style={styles.summaryValue}>
+                  {formatCurrency(paymentSummary.yearly)}
+                </Text>
+                <Text style={styles.summaryMeta}>Cash payments this year</Text>
+              </View>
+
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryTitle}>Active Buyers</Text>
+                <Text style={styles.summaryValue}>
+                  {buyerList.length ?? 0}
+                </Text>
+                <Text style={styles.summaryMeta}>Consumption tracked this month</Text>
+              </View>
+            </View>
+
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryCard}>
                 <Text style={styles.summaryTitle}>Monthly Sales</Text>
                 <Text style={styles.summaryValue}>
                   {formatCurrency(summary.monthlySales?.amount)}
@@ -226,13 +342,37 @@ export default function DashboardScreen({ onNavigate, onLogout }) {
               </View>
 
               <View style={styles.summaryCard}>
-                <Text style={styles.summaryTitle}>Active Buyers</Text>
+                <Text style={styles.summaryTitle}>Yearly Sales</Text>
                 <Text style={styles.summaryValue}>
-                  {buyerList.length ?? 0}
+                  {formatCurrency(summary.yearlySales?.amount)}
                 </Text>
-                <Text style={styles.summaryMeta}>Consumption tracked this month</Text>
+                <Text style={styles.summaryMeta}>
+                  {formatLiters(summary.yearlySales?.quantity)} over{' '}
+                  {summary.yearlySales?.transactions ?? 0} Tx
+                </Text>
               </View>
             </View>
+
+            {summary.yearlySalesByMilkSource && (
+              <View style={styles.card}>
+                <Text style={styles.cardHeading}>Yearly Milk Sales by Source</Text>
+                <Text style={styles.overviewMeta}>
+                  This year: {formatLiters(summary.yearlySalesByMilkSource.reduce((s, x) => s + x.quantity, 0))} · {formatCurrency(summary.yearlySalesByMilkSource.reduce((s, x) => s + x.amount, 0))}
+                </Text>
+                {summary.yearlySalesByMilkSource.map((item) => (
+                  <View key={`yearly-${item.milkSource}`} style={styles.listRow}>
+                    <View>
+                      <Text style={styles.listTitle}>{item.label}</Text>
+                      <Text style={styles.listSubtitle}>{item.transactions ?? 0} transactions</Text>
+                    </View>
+                    <View style={styles.listValues}>
+                      <Text style={styles.listAmount}>{formatLiters(item.quantity)}</Text>
+                      <Text style={styles.listAmount}>{formatCurrency(item.amount)}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
 
             <View style={styles.chartCard}>
               <Text style={styles.cardHeading}>{trendDisplayLabel} Sales Trend</Text>

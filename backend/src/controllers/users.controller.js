@@ -16,19 +16,33 @@ const getUsers = async (req, res) => {
 
     const role = parseInt(roleParam, 10);
     
-    if (isNaN(role) || (role !== 0 && role !== 1 && role !== 2)) {
-      return res.status(400).json({ error: "Invalid role. Must be 0, 1, or 2" });
+    // Allow roles: 0 (Super Admin), 1 (Admin), 2 (Consumer), 3 (Seller)
+    if (isNaN(role) || (role !== 0 && role !== 1 && role !== 2 && role !== 3)) {
+      return res.status(400).json({ error: "Invalid role. Must be 0, 1, 2, or 3" });
     }
 
     const users = await getUsersByRole(role);
     
     console.log(`[users] Controller: Found ${users.length} users with role ${role}`);
     
-    // Remove passwordHash from response
-    const safeUsers = users.map(({ passwordHash, ...user }) => ({
-      ...user,
-      _id: user._id?.toString(),
-    }));
+    // Convert Mongoose documents to plain objects and remove passwordHash
+    const safeUsers = users.map((user) => {
+      const userObj = user.toObject ? user.toObject() : user;
+      const { passwordHash, ...safeUser } = userObj;
+      // Ensure _id is a string
+      if (safeUser._id) {
+        safeUser._id = safeUser._id.toString();
+      }
+      // Log each user's data for debugging
+      console.log(`[users] User data:`, {
+        _id: safeUser._id,
+        name: safeUser.name,
+        mobile: safeUser.mobile,
+        email: safeUser.email,
+        role: safeUser.role
+      });
+      return safeUser;
+    });
 
     console.log(`[users] Controller: Returning ${safeUsers.length} safe users`);
     return res.json(safeUsers);

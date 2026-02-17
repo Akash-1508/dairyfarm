@@ -6,4 +6,6 @@ module.exports = {
   ...require("./buyers"),
   ...require("./sellers"),
   ...require("./whatsappMessage"),
+  ...require("./payments"),
+  ...require("./paymentLogs"),
 };

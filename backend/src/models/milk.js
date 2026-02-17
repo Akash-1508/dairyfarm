@@ -50,6 +50,14 @@ const MilkTransactionSchema = new mongoose.Schema({
     required: false,
     trim: true
   },
+  // Milk source: Cow, Buffalo, Sheep, Goat
+  milkSource: {
+    type: String,
+    enum: ['cow', 'buffalo', 'sheep', 'goat'],
+    required: false,
+    trim: true,
+    lowercase: true
+  },
   fixedPrice: {
     type: Number,
     required: false,
@@ -66,12 +74,44 @@ const MilkTransactionSchema = new mongoose.Schema({
     type: Number,
     required: false,
     min: 0
+  },
+  // Payment tracking fields
+  paymentStatus: {
+    type: String,
+    enum: ["unpaid", "partial", "paid"],
+    default: "unpaid",
+    required: false
+  },
+  paidAmount: {
+    type: Number,
+    default: 0,
+    min: 0,
+    required: false
+  },
+  paymentIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Payment'
+  }],
+  // Track which payment covered which quantity
+  paidQuantity: {
+    type: Number,
+    default: 0,
+    min: 0,
+    required: false
   }
 }, {
   timestamps: true,
   toJSON: {
     transform: function(doc, ret) {
       ret._id = ret._id.toString();
+      if (ret.paymentIds) {
+        ret.paymentIds = ret.paymentIds.map(id => id.toString());
+      }
+      // Purane records: agar cash sale mein amountReceived hai lekin paidAmount 0 hai, to response mein sahi dikhao
+      if (ret.type === 'sale' && ret.paymentType === 'cash' && ret.amountReceived != null && (ret.paidAmount == null || ret.paidAmount === 0)) {
+        ret.paidAmount = ret.amountReceived;
+        ret.paymentStatus = ret.amountReceived >= (ret.totalAmount || 0) ? 'paid' : (ret.amountReceived > 0 ? 'partial' : 'unpaid');
+      }
       return ret;
     }
   }
@@ -81,6 +121,9 @@ const MilkTransactionSchema = new mongoose.Schema({
 MilkTransactionSchema.index({ buyerPhone: 1 });
 MilkTransactionSchema.index({ sellerPhone: 1 });
 MilkTransactionSchema.index({ date: -1 });
+MilkTransactionSchema.index({ milkSource: 1 });
+MilkTransactionSchema.index({ paymentStatus: 1 });
+MilkTransactionSchema.index({ customerId: 1 }); // For linking with User
 
 const MilkTransaction = mongoose.model('MilkTransaction', MilkTransactionSchema);
 
@@ -100,7 +143,93 @@ async function getAllMilkTransactions(mobileNumber) {
 }
 
 async function addMilkTransaction(transactionData) {
-  const transaction = new MilkTransaction(transactionData);
+  const data = { ...transactionData };
+  // When milk sale is cash and amountReceived is given, set paidAmount and paymentStatus
+  if (data.type === 'sale' && data.paymentType === 'cash' && data.amountReceived != null && data.amountReceived >= 0) {
+    data.paidAmount = Number(data.amountReceived);
+    if (data.paidAmount >= (data.totalAmount || 0)) {
+      data.paymentStatus = 'paid';
+    } else if (data.paidAmount > 0) {
+      data.paymentStatus = 'partial';
+    } else {
+      data.paymentStatus = 'unpaid';
+    }
+  }
+  const transaction = new MilkTransaction(data);
+  return await transaction.save();
+}
+
+async function getMilkTransactionById(transactionId) {
+  return await MilkTransaction.findById(transactionId);
+}
+
+async function updateMilkTransaction(transactionId, updates) {
+  return await MilkTransaction.findByIdAndUpdate(
+    transactionId,
+    { $set: updates },
+    { new: true, runValidators: true }
+  );
+}
+
+async function deleteMilkTransaction(transactionId) {
+  return await MilkTransaction.findByIdAndDelete(transactionId);
+}
+
+// Get unpaid milk transactions for a customer (type: sale, buyer)
+async function getUnpaidMilkTransactions(customerMobile, customerId = null) {
+  const query = {
+    type: 'sale',
+    $or: [
+      { paymentStatus: 'unpaid' },
+      { paymentStatus: 'partial' }
+    ]
+  };
+  if (customerMobile) query.buyerPhone = customerMobile.trim();
+  return await MilkTransaction.find(query).sort({ date: -1 }).limit(100);
+}
+
+// Get unpaid milk transactions for a seller (type: purchase – we owe the seller)
+async function getUnpaidMilkTransactionsForSeller(sellerMobile) {
+  if (!sellerMobile || !String(sellerMobile).trim()) return [];
+  const query = {
+    type: 'purchase',
+    sellerPhone: String(sellerMobile).trim(),
+    $or: [
+      { paymentStatus: 'unpaid' },
+      { paymentStatus: 'partial' }
+    ]
+  };
+  return await MilkTransaction.find(query).sort({ date: -1 }).limit(100);
+}
+
+// Update milk transaction payment status
+async function updateMilkTransactionPayment(transactionId, paymentId, paidAmount, paidQuantity) {
+  const transaction = await MilkTransaction.findById(transactionId);
+  if (!transaction) {
+    throw new Error('Milk transaction not found');
+  }
+  
+  // Update paid amounts
+  transaction.paidAmount = (transaction.paidAmount || 0) + paidAmount;
+  transaction.paidQuantity = (transaction.paidQuantity || 0) + paidQuantity;
+  
+  // Add payment ID if not already present
+  if (!transaction.paymentIds) {
+    transaction.paymentIds = [];
+  }
+  if (!transaction.paymentIds.includes(paymentId)) {
+    transaction.paymentIds.push(paymentId);
+  }
+  
+  // Update payment status
+  if (transaction.paidAmount >= transaction.totalAmount && transaction.paidQuantity >= transaction.quantity) {
+    transaction.paymentStatus = 'paid';
+  } else if (transaction.paidAmount > 0 || transaction.paidQuantity > 0) {
+    transaction.paymentStatus = 'partial';
+  } else {
+    transaction.paymentStatus = 'unpaid';
+  }
+  
   return await transaction.save();
 }
 
@@ -108,4 +237,10 @@ module.exports = {
   MilkTransaction,
   getAllMilkTransactions,
   addMilkTransaction,
+  getMilkTransactionById,
+  updateMilkTransaction,
+  deleteMilkTransaction,
+  getUnpaidMilkTransactions,
+  getUnpaidMilkTransactionsForSeller,
+  updateMilkTransactionPayment,
 };

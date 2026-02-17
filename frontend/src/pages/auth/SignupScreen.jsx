@@ -48,6 +48,12 @@ export default function SignupScreen({ onNavigate }) {
       return;
     }
 
+    // Email validation - if provided, must contain @
+    if (email && email.trim() && !email.trim().includes('@')) {
+      Alert.alert('Error', 'Email must contain @ symbol');
+      return;
+    }
+
     // Validate password match
     if (password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match');
@@ -92,7 +98,7 @@ export default function SignupScreen({ onNavigate }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Dairy Farm Management</Text>
+        <Text style={styles.headerTitle}>HiTech Dairy Farm</Text>
         <Text style={styles.headerSubtitle}>Signup</Text>
       </View>
       <ScrollView contentContainerStyle={styles.content}>

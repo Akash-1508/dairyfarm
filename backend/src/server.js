@@ -42,8 +42,8 @@ registerRoutes(app);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-const envPort = process.env.PORT ? Number(process.env.PORT) : undefined;
-const port = typeof envPort === "number" && !Number.isNaN(envPort) ? envPort : 4000;
+const { port: configPort } = require("./config");
+const port = typeof configPort === "number" && !Number.isNaN(configPort) ? configPort : 4000;
 
 async function bootstrap() {
   try {

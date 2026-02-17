@@ -3,7 +3,7 @@
  * Centralized constants for the application
  */
 
-export const APP_NAME = 'Dairy Farm Management';
+export const APP_NAME = 'HiTech Dairy Farm';
 
 export const ROUTES = {
   LOGIN: 'Login',
@@ -19,6 +19,13 @@ export const ROUTES = {
 };
 
 export const ANIMAL_TYPES = ['Cow', 'Buffalo', 'Goat', 'Sheep'];
+
+export const MILK_SOURCE_TYPES = [
+  { value: 'cow', label: 'Cow' },
+  { value: 'buffalo', label: 'Buffalo' },
+  { value: 'sheep', label: 'Sheep' },
+  { value: 'goat', label: 'Goat' },
+];
 
 export const ANIMAL_STATUS = ['active', 'sold', 'deceased'];
 

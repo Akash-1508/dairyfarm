@@ -16,6 +16,7 @@ import Button from '../../components/common/Button';
 import { userService } from '../../services/users/userService';
 import { authService } from '../../services/auth/authService';
 
+const ROLE_SUPER_ADMIN = 0;
 const ROLE_ADMIN = 1;
 const ROLE_CONSUMER = 2;
 
@@ -47,8 +48,21 @@ export default function AdminListScreen({ onNavigate, onLogout }) {
   const loadAdmins = async () => {
     try {
       setLoading(true);
-      const list = await userService.getUsersByRole(ROLE_ADMIN);
-      setAdmins(Array.isArray(list) ? list : []);
+      // Fetch both role 0 (Super Admin) and role 1 (Admin) - dono admin list mein dikhne chahiye
+      const [superAdmins, adminsRole1] = await Promise.all([
+        userService.getUsersByRole(ROLE_SUPER_ADMIN),
+        userService.getUsersByRole(ROLE_ADMIN),
+      ]);
+      const list0 = Array.isArray(superAdmins) ? superAdmins : [];
+      const list1 = Array.isArray(adminsRole1) ? adminsRole1 : [];
+      const byId = new Map();
+      [...list0, ...list1].forEach((u) => {
+        const id = u._id?.toString?.() ?? u._id;
+        if (id && !byId.has(id)) byId.set(id, { ...u, _id: id });
+      });
+      const adminsList = Array.from(byId.values());
+      console.log('[AdminList] Loaded admins (role 0 + 1):', adminsList.length, adminsList);
+      setAdmins(adminsList);
     } catch (e) {
       console.error('[AdminList] Load error:', e);
       Alert.alert('Error', e?.message || 'Failed to load admins');
@@ -178,9 +192,15 @@ export default function AdminListScreen({ onNavigate, onLogout }) {
               <View style={styles.cardHeader}>
                 <View style={styles.cardInfo}>
                   <Text style={styles.cardName} numberOfLines={2}>
-                    {admin.name || admin.mobile || 'Admin'}
+                    {admin.name || 'Admin (No Name)'}
                   </Text>
-                  {admin.mobile ? <Text style={styles.cardMobile}>{admin.mobile}</Text> : null}
+                  {admin.mobile ? (
+                    <Text style={styles.cardMobile}>{admin.mobile}</Text>
+                  ) : (
+                    <Text style={[styles.cardMobile, { color: '#999', fontStyle: 'italic' }]}>
+                      Mobile: Not Available
+                    </Text>
+                  )}
                   {admin.email ? <Text style={styles.cardEmail} numberOfLines={1}>{admin.email}</Text> : null}
                 </View>
                 <View style={[styles.statusBadge, admin.isActive !== false ? styles.statusActive : styles.statusInactive]}>

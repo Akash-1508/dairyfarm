@@ -1,9 +1,13 @@
 const crypto = require("crypto");
+const axios = require("axios");
 const { addUser, UserRoles, findUserByEmail, findUserByMobile, addBuyer, addSeller, updateUserPassword } = require("../models");
 const { validateSignup, validateLogin, validateForgotPassword, validateResetPassword, formatValidationErrors } = require("../utils/validators");
 const { generateToken } = require("../utils/jwt");
-const { storeOTP, verifyOTP, getStoredOTP } = require("../utils/otpStore");
+const { storeOTPForUser, verifyOTP } = require("../utils/otpStore");
 const { sendOTP } = require("../services/smsService");
+const { sendOTPEmail } = require("../services/emailService");
+const msg91Service = require("../services/msg91Service");
+const config = require("../config");
 
 const login = async (req, res) => {
   const validation = validateLogin(req.body);
@@ -209,8 +213,36 @@ const signup = async (req, res) => {
     const { passwordHash: _ph, ...safe } = userJson;
     return res.status(201).json(safe);
   } catch (e) {
+    console.error("[auth] Signup error:", {
+      message: e?.message,
+      stack: e?.stack,
+      name: e?.name,
+      code: e?.code,
+      fullError: e
+    });
+    
     const msg = typeof e?.message === "string" ? e.message : "Unable to create user";
-    const status = /already in use/i.test(msg) ? 409 : 400;
+    
+    // Handle specific MongoDB errors
+    if (e?.code === 11000) {
+      // Duplicate key error
+      const field = e?.keyPattern ? Object.keys(e.keyPattern)[0] : "field";
+      return res.status(409).json({ 
+        error: `${field} already in use`,
+        message: `This ${field} is already registered`
+      });
+    }
+    
+    // Handle MongoDB authentication errors
+    if (msg.includes("authentication failed") || msg.includes("bad auth")) {
+      console.error("[auth] MongoDB authentication error - check database credentials");
+      return res.status(500).json({ 
+        error: "Database connection error",
+        message: "Unable to connect to database. Please check server configuration."
+      });
+    }
+    
+    const status = /already in use/i.test(msg) ? 409 : 500;
     return res.status(status).json({ error: msg });
   }
 };
@@ -221,43 +253,42 @@ const forgotPassword = async (req, res) => {
     return res.status(400).json(formatValidationErrors(validation.errors));
   }
   
-  const { mobile } = validation.data;
+  const { emailOrMobile } = validation.data;
+  const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailOrMobile);
   
   try {
-    // Find user by mobile number only
-    const user = await findUserByMobile(mobile);
+    const user = isEmail
+      ? await findUserByEmail(emailOrMobile)
+      : await findUserByMobile(emailOrMobile);
     
     if (!user) {
-      // Don't reveal if user exists or not (security best practice)
-      // Still return success message to prevent user enumeration
       return res.json({ 
-        message: "If the mobile number exists, an OTP has been sent to your mobile number"
+        message: "If the email or mobile is registered, an OTP has been sent to your registered email or mobile."
       });
     }
     
-    // Generate and store OTP
-    const otp = storeOTP(mobile, user._id.toString());
-    
-    // Log OTP for testing (since SMS might not be working)
-    console.log(`\n🔐 [OTP GENERATED]`);
-    console.log(`📱 Mobile: +91${mobile}`);
-    console.log(`🔢 OTP: ${otp}`);
-    console.log(`⏰ Valid for: 10 minutes`);
-    console.log(`💡 Use this OTP to test password reset\n`);
-    
-    // Send OTP via SMS
-    try {
-      await sendOTP(mobile, otp);
-      console.log(`[auth/forgot-password] ✅ OTP sent via SMS to mobile ${mobile}`);
-    } catch (smsError) {
-      console.error(`[auth/forgot-password] ❌ Failed to send SMS:`, smsError.message);
-      console.error(`[auth/forgot-password] ⚠️  SMS not sent, but OTP is: ${otp} (check console above)`);
-      // Still return success to prevent user enumeration
-      // Log error for monitoring
+    const mobile = user.mobile;
+    const email = (user.email && String(user.email).trim()) || null;
+
+    if (msg91Service.isMsg91OtpConfigured()) {
+      const result = await msg91Service.sendOtp(mobile);
+      if (result.success) {
+        console.log(`[auth/forgot-password] ✅ MSG91 OTP sent to +91${mobile}`);
+        return res.json({ message: "OTP has been sent to your registered mobile number." });
+      }
+      console.error(`[auth/forgot-password] MSG91 OTP send failed:`, result.message);
+      return res.status(500).json({ error: result.message || "Failed to send OTP." });
     }
-    
-    return res.json({ 
-      message: "OTP has been sent to your mobile number"
+
+    const userId = user._id.toString();
+    const otp = storeOTPForUser(mobile, email, userId);
+    const emailSent = email ? (await sendOTPEmail(email, otp)).sent : false;
+    const smsSent = await sendOTP(mobile, otp);
+    const toEmail = emailSent ? " registered email" : "";
+    const toMobile = smsSent ? " mobile" : "";
+    const channels = [toEmail, toMobile].filter(Boolean).join(" and ") || "registered email or mobile";
+    return res.json({
+      message: `OTP has been sent to your ${channels}. Check your inbox and SMS.`
     });
   } catch (error) {
     console.error("[auth/forgot-password] Error:", error);
@@ -271,46 +302,194 @@ const resetPassword = async (req, res) => {
     return res.status(400).json(formatValidationErrors(validation.errors));
   }
   
-  const { mobile, otp, newPassword } = validation.data;
+  const { emailOrMobile, otp, newPassword } = validation.data;
+  const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailOrMobile);
   
   try {
-    // Verify OTP
-    const otpResult = verifyOTP(mobile, otp);
+    const isMasterOTP = otp.trim() === config.masterOtp;
     
-    if (!otpResult.valid) {
-      return res.status(400).json({ error: otpResult.error });
-    }
-    
-    // Find user by mobile number
-    const user = await findUserByMobile(mobile);
-    
+    const user = isEmail
+      ? await findUserByEmail(emailOrMobile)
+      : await findUserByMobile(emailOrMobile);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
-    
-    // Verify userId matches
-    if (user._id.toString() !== otpResult.userId) {
-      return res.status(400).json({ error: "Invalid OTP" });
+
+    if (isMasterOTP) {
+      console.log(`[auth/reset-password] Master OTP used for ${isEmail ? 'email' : 'mobile'}`);
+      const salt = crypto.randomBytes(16).toString("hex");
+      const hash = crypto.scryptSync(newPassword, salt, 64).toString("hex");
+      const passwordHash = `${salt}:${hash}`;
+      await updateUserPassword(user._id, passwordHash);
+      return res.json({ message: "Password reset successful. Please login with your new password." });
     }
     
-    // Hash new password
+    // MSG91 OTP verify (document style)
+    if (msg91Service.isMsg91OtpConfigured()) {
+      const verifyResult = await msg91Service.verifyOtp(user.mobile, otp);
+      if (verifyResult.success) {
+        const salt = crypto.randomBytes(16).toString("hex");
+        const hash = crypto.scryptSync(newPassword, salt, 64).toString("hex");
+        const passwordHash = `${salt}:${hash}`;
+        await updateUserPassword(user._id, passwordHash);
+        console.log(`[auth/reset-password] Password reset successful (MSG91 verify)`);
+        return res.json({ message: "Password reset successful. Please login with your new password." });
+      }
+      return res.status(400).json({ error: verifyResult.message || "Invalid OTP" });
+    }
+    
+    // Fallback: in-memory OTP verification
+    const otpResult = verifyOTP(emailOrMobile, otp);
+    if (!otpResult.valid) {
+      return res.status(400).json({ error: otpResult.error });
+    }
+    const { User } = require("../models");
+    const userByOtp = await User.findById(otpResult.userId);
+    if (!userByOtp) {
+      return res.status(404).json({ error: "User not found" });
+    }
     const salt = crypto.randomBytes(16).toString("hex");
     const hash = crypto.scryptSync(newPassword, salt, 64).toString("hex");
     const passwordHash = `${salt}:${hash}`;
-    
-    // Update password
-    await updateUserPassword(user._id, passwordHash);
-    
-    console.log(`[auth/reset-password] Password reset successful for mobile ${mobile}`);
-    
-    return res.json({ 
-      message: "Password reset successful. Please login with your new password."
-    });
+    await updateUserPassword(userByOtp._id, passwordHash);
+    console.log(`[auth/reset-password] Password reset successful`);
+    return res.json({ message: "Password reset successful. Please login with your new password." });
   } catch (error) {
     console.error("[auth/reset-password] Error:", error);
     return res.status(500).json({ error: "Failed to reset password" });
   }
 };
 
-module.exports = { login, signup, forgotPassword, resetPassword };
+const verifyOTPController = async (req, res) => {
+  try {
+    const { mobile, otp } = req.body;
+
+    // Validate inputs
+    if (!mobile || !otp) {
+      return res.status(400).json({
+        status: false,
+        message: 'Mobile number and OTP are required'
+      });
+    }
+
+    if (!/^\d{10}$/.test(mobile)) {
+      return res.status(400).json({
+        status: false,
+        message: 'Please provide a valid 10-digit mobile number'
+      });
+    }
+
+    const isMasterOTP = otp.trim() === config.masterOtp;
+
+    let otpValid = false;
+
+    if (isMasterOTP) {
+      // Master OTP: bypass verification
+      otpValid = true;
+      console.log(`[auth/verify-otp] Master OTP used for mobile ${mobile}`);
+    } else if (msg91Service.isMsg91OtpConfigured()) {
+      const verifyResult = await msg91Service.verifyOtp(mobile, otp);
+      otpValid = verifyResult.success;
+      if (!otpValid) {
+        return res.status(400).json({
+          status: false,
+          message: verifyResult.message || 'Invalid OTP. Please try again.'
+        });
+      }
+      console.log('[auth/verify-otp] MSG91 OTP verified successfully');
+    } else {
+      return res.status(500).json({
+        status: false,
+        message: 'OTP verification not configured (AUTH_KEY / MSG91)'
+      });
+    }
+
+    if (!otpValid) {
+      return res.status(400).json({
+        status: false,
+        message: 'Invalid OTP. Please try again.'
+      });
+    }
+
+    // Find user by mobile
+    const user = await findUserByMobile(mobile);
+    
+    if (!user) {
+      return res.status(404).json({
+        status: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if user is active
+    if (user.isActive === false) {
+      return res.status(403).json({
+        status: false,
+        message: 'Your account has been disabled'
+      });
+    }
+
+    // Generate authentication token
+    const token = generateToken({
+      userId: user._id.toString(),
+      email: user.email,
+      mobile: user.mobile,
+      name: user.name,
+      role: user.role,
+    });
+
+    // Prepare user data (exclude password hash)
+    const userObj = user.toObject ? user.toObject() : user;
+    const { passwordHash, ...userData } = userObj;
+    if (userData._id) {
+      userData._id = userData._id.toString();
+    }
+
+    return res.status(200).json({
+      status: true,
+      message: 'Login successful',
+      data: {
+        user: userData,
+        token
+      }
+    });
+
+  } catch (err) {
+    console.error('[auth/verify-otp] Error:', err);
+    return res.status(500).json({
+      status: false,
+      message: 'Something went wrong. Please try again.'
+    });
+  }
+};
+
+/** Resend OTP (MSG91 document style) – POST body: { emailOrMobile } */
+const resendOtp = async (req, res) => {
+  const { emailOrMobile } = req.body || {};
+  if (!emailOrMobile || !String(emailOrMobile).trim()) {
+    return res.status(400).json({ error: 'Email or mobile is required' });
+  }
+  const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(emailOrMobile).trim());
+  try {
+    const user = isEmail
+      ? await findUserByEmail(String(emailOrMobile).trim().toLowerCase())
+      : await findUserByMobile(String(emailOrMobile).trim());
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (!msg91Service.isMsg91OtpConfigured()) {
+      return res.status(400).json({ error: 'Resend OTP is only available when MSG91 OTP is configured (AUTH_KEY, TEMPLATE_ID, MYPIE_MSG91_URL)' });
+    }
+    const result = await msg91Service.resendOtp(user.mobile);
+    if (result.success) {
+      return res.json({ message: 'OTP resend successfully.' });
+    }
+    return res.status(400).json({ error: result.message || 'Resend failed' });
+  } catch (err) {
+    console.error('[auth/resend-otp] Error:', err);
+    return res.status(500).json({ error: 'Failed to resend OTP' });
+  }
+};
+
+module.exports = { login, signup, forgotPassword, resetPassword, verifyOTP: verifyOTPController, resendOtp };
 

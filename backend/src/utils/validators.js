@@ -12,8 +12,8 @@ const signupSchema = z.object({
     .string()
     .optional()
     .refine(
-      (val) => !val || val.trim() === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim()),
-      "Invalid email format"
+      (val) => !val || val.trim() === "" || val.trim().includes('@'),
+      "Email must contain @ symbol"
     )
     .transform((val) => val && val.trim() ? val.toLowerCase().trim() : ""),
   password: z
@@ -92,28 +92,42 @@ function validateSignup(data) {
   };
 }
 
-// Forgot password validation schema - Mobile only
+// Forgot password validation schema - Email OR Mobile
 const forgotPasswordSchema = z.object({
-  mobile: z
+  emailOrMobile: z
     .string()
-    .min(1, "Mobile number is required")
+    .min(1, "Email or mobile number is required")
     .trim()
     .refine(
-      (val) => /^[0-9]{10}$/.test(val),
-      "Mobile must be exactly 10 digits"
-    ),
+      (val) => {
+        const trimmed = val.trim();
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) || /^[0-9]{10}$/.test(trimmed);
+      },
+      "Enter a valid email or 10-digit mobile number"
+    )
+    .transform((val) => {
+      const t = val.trim();
+      return /^[0-9]{10}$/.test(t) ? t : t.toLowerCase();
+    }),
 });
 
-// Reset password validation schema - Mobile only
+// Reset password validation schema - Email OR Mobile
 const resetPasswordSchema = z.object({
-  mobile: z
+  emailOrMobile: z
     .string()
-    .min(1, "Mobile number is required")
+    .min(1, "Email or mobile number is required")
     .trim()
     .refine(
-      (val) => /^[0-9]{10}$/.test(val),
-      "Mobile must be exactly 10 digits"
-    ),
+      (val) => {
+        const trimmed = val.trim();
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) || /^[0-9]{10}$/.test(trimmed);
+      },
+      "Enter a valid email or 10-digit mobile number"
+    )
+    .transform((val) => {
+      const t = val.trim();
+      return /^[0-9]{10}$/.test(t) ? t : t.toLowerCase();
+    }),
   otp: z
     .string()
     .min(1, "OTP is required")

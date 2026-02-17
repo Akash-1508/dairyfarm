@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  TextInput,
 } from 'react-native';
 import HeaderWithMenu from '../../components/common/HeaderWithMenu';
 import Input from '../../components/common/Input';
@@ -16,6 +17,7 @@ import { formatCurrency } from '../../utils/currencyUtils';
 import { milkService } from '../../services/milk/milkService';
 import { buyerService } from '../../services/buyers/buyerService';
 import { sellerService } from '../../services/sellers/sellerService';
+import { MILK_SOURCE_TYPES } from '../../constants';
 
 /**
  * Unified Milk Screen
@@ -28,6 +30,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
   const [sellers, setSellers] = useState([]); // Sellers from sellers table
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState(null);
   const [showContactDropdown, setShowContactDropdown] = useState(false);
   const [showBuyerList, setShowBuyerList] = useState(false);
   const [showSellerList, setShowSellerList] = useState(false);
@@ -37,6 +40,8 @@ export default function MilkScreen({ onNavigate, onLogout }) {
   const [sellersLoading, setSellersLoading] = useState(false);
   const [buyersForModal, setBuyersForModal] = useState([]);
   const [sellersForModal, setSellersForModal] = useState([]);
+  const [buyerSearchQuery, setBuyerSearchQuery] = useState('');
+  const [sellerSearchQuery, setSellerSearchQuery] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -50,6 +55,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
     notes: '',
     paymentType: 'cash',
     amountReceived: '',
+    milkSource: 'cow',
   });
 
   // Load transactions, buyers, and sellers on mount
@@ -173,6 +179,34 @@ export default function MilkScreen({ onNavigate, onLogout }) {
     return Array.from(contactMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [buyers, sellers, transactions, transactionType]);
 
+  // Filtered buyers based on search query
+  const filteredBuyers = useMemo(() => {
+    const buyersToFilter = buyersForModal.length > 0 ? buyersForModal : buyers;
+    if (!buyerSearchQuery.trim()) {
+      return buyersToFilter;
+    }
+    const query = buyerSearchQuery.toLowerCase().trim();
+    return buyersToFilter.filter((buyer) => {
+      const nameMatch = buyer.name?.toLowerCase().includes(query);
+      const mobileMatch = buyer.mobile?.toLowerCase().includes(query);
+      return nameMatch || mobileMatch;
+    });
+  }, [buyersForModal, buyers, buyerSearchQuery]);
+
+  // Filtered sellers based on search query
+  const filteredSellers = useMemo(() => {
+    const sellersToFilter = sellersForModal.length > 0 ? sellersForModal : sellers;
+    if (!sellerSearchQuery.trim()) {
+      return sellersToFilter;
+    }
+    const query = sellerSearchQuery.toLowerCase().trim();
+    return sellersToFilter.filter((seller) => {
+      const nameMatch = seller.name?.toLowerCase().includes(query);
+      const mobileMatch = seller.mobile?.toLowerCase().includes(query);
+      return nameMatch || mobileMatch;
+    });
+  }, [sellersForModal, sellers, sellerSearchQuery]);
+
   const handleAddTransaction = async () => {
     // Validation
     if (!formData.quantity || !formData.pricePerLiter || !formData.contactName) {
@@ -234,43 +268,57 @@ export default function MilkScreen({ onNavigate, onLogout }) {
       }
 
       const transactionData = {
-        type: transactionType,
+        type: editingTransaction ? editingTransaction.type : transactionType,
         date: new Date(formData.date),
         quantity: quantity,
         pricePerLiter: pricePerLiter,
         totalAmount: totalAmount,
-        [transactionType === 'sale' ? 'buyer' : 'seller']: formData.contactName,
-        [transactionType === 'sale' ? 'buyerPhone' : 'sellerPhone']: formData.contactPhone || undefined,
+        [editingTransaction ? (editingTransaction.type === 'sale' ? 'buyer' : 'seller') : (transactionType === 'sale' ? 'buyer' : 'seller')]: formData.contactName,
+        [editingTransaction ? (editingTransaction.type === 'sale' ? 'buyerPhone' : 'sellerPhone') : (transactionType === 'sale' ? 'buyerPhone' : 'sellerPhone')]: formData.contactPhone || undefined,
         notes: formData.notes,
         fixedPrice: fixedPrice,
         paymentType: formData.paymentType || 'cash',
         amountReceived: formData.paymentType === 'cash' && formData.amountReceived
           ? parseFloat(formData.amountReceived) : undefined,
+        milkSource: formData.milkSource || 'cow',
       };
 
-      let savedTransaction;
-      if (transactionType === 'sale') {
-        savedTransaction = await milkService.recordSale(transactionData);
+      if (editingTransaction) {
+        // Update existing transaction
+        if (!editingTransaction._id) {
+          Alert.alert('Error', 'Transaction ID is missing. Cannot update transaction.');
+          return;
+        }
+        console.log('[MilkScreen] Updating transaction:', { id: editingTransaction._id, type: editingTransaction.type });
+        await milkService.updateTransaction(editingTransaction._id, transactionData);
+        Alert.alert('Success', `Milk ${editingTransaction.type === 'sale' ? 'sale' : 'purchase'} updated successfully!`);
       } else {
-        savedTransaction = await milkService.recordPurchase(transactionData);
+        // Create new transaction
+        let savedTransaction;
+        if (transactionType === 'sale') {
+          savedTransaction = await milkService.recordSale(transactionData);
+        } else {
+          savedTransaction = await milkService.recordPurchase(transactionData);
+        }
+        Alert.alert('Success', `Milk ${transactionType === 'sale' ? 'sale' : 'purchase'} saved to database!`);
       }
 
       // Reload all transactions to get the latest data from DB
       await loadTransactions();
 
-      // Keep contact info filled, only reset quantity, price, date, notes
+      // Reset form
       setFormData({
         date: new Date().toISOString().split('T')[0],
         quantity: '',
         pricePerLiter: '',
-        contactName: formData.contactName,
-        contactPhone: formData.contactPhone,
+        contactName: '',
+        contactPhone: '',
         notes: '',
         paymentType: 'cash',
         amountReceived: '',
       });
+      setEditingTransaction(null);
       setShowForm(false);
-      Alert.alert('Success', `Milk ${transactionType === 'sale' ? 'sale' : 'purchase'} saved to database!`);
     } catch (error) {
       console.error('Failed to save transaction:', error);
       Alert.alert('Error', error.message || 'Failed to save transaction. Please try again.');
@@ -327,10 +375,127 @@ export default function MilkScreen({ onNavigate, onLogout }) {
     // Form already has input fields, user can type new contact
   };
 
-  const handleDelete = async (_id) => {
+  const handleEdit = (transaction) => {
+    console.log('[MilkScreen] handleEdit called with transaction:', { 
+      _id: transaction._id, 
+      type: transaction.type,
+      fullTransaction: transaction 
+    });
+    
+    if (!transaction._id) {
+      Alert.alert('Error', 'Transaction ID is missing. Cannot edit this transaction.');
+      return;
+    }
+    
+    setEditingTransaction(transaction);
+    // Set transactionType to match the transaction being edited
+    setTransactionType(transaction.type);
+    setFormData({
+      date: new Date(transaction.date).toISOString().split('T')[0],
+      quantity: String(transaction.quantity),
+      pricePerLiter: String(transaction.pricePerLiter),
+      contactName: transaction.type === 'sale' ? transaction.buyer : transaction.seller,
+      contactPhone: transaction.type === 'sale' ? transaction.buyerPhone : transaction.sellerPhone,
+      notes: transaction.notes || '',
+      paymentType: transaction.paymentType || 'cash',
+      amountReceived: transaction.amountReceived ? String(transaction.amountReceived) : '',
+      milkSource: transaction.milkSource || 'cow',
+    });
+    setShowForm(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!editingTransaction) return;
+
+    const quantity = parseFloat(formData.quantity);
+    const pricePerLiter = parseFloat(formData.pricePerLiter);
+
+    if (!quantity || quantity <= 0) {
+      Alert.alert('Error', 'Please enter a valid quantity');
+      return;
+    }
+
+    if (!pricePerLiter || pricePerLiter <= 0) {
+      Alert.alert('Error', 'Please enter a valid price per liter');
+      return;
+    }
+
+    if (!formData.contactName) {
+      Alert.alert('Error', `Please enter ${transactionType === 'sale' ? 'buyer' : 'seller'} name`);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const totalAmount = quantity * pricePerLiter;
+
+      // Get buyer's/seller's fixed price for reference
+      let fixedPrice = undefined;
+      if (editingTransaction.type === 'sale' && formData.contactPhone) {
+        const buyer = buyers.find((b) => b.mobile?.trim() === formData.contactPhone.trim());
+        if (buyer && buyer.rate) {
+          fixedPrice = buyer.rate;
+        }
+      } else if (editingTransaction.type === 'purchase' && formData.contactPhone) {
+        const seller = sellers.find((s) => s.mobile?.trim() === formData.contactPhone.trim());
+        if (seller && seller.rate) {
+          fixedPrice = seller.rate;
+        }
+      }
+
+      if (!editingTransaction._id) {
+        Alert.alert('Error', 'Transaction ID is missing. Cannot update transaction.');
+        return;
+      }
+
+      const transactionData = {
+        type: editingTransaction.type,
+        date: new Date(formData.date),
+        quantity: quantity,
+        pricePerLiter: pricePerLiter,
+        totalAmount: totalAmount,
+        [editingTransaction.type === 'sale' ? 'buyer' : 'seller']: formData.contactName,
+        [editingTransaction.type === 'sale' ? 'buyerPhone' : 'sellerPhone']: formData.contactPhone || undefined,
+        notes: formData.notes,
+        fixedPrice: fixedPrice,
+        paymentType: formData.paymentType || 'cash',
+        amountReceived: formData.paymentType === 'cash' && formData.amountReceived
+          ? parseFloat(formData.amountReceived) : undefined,
+        milkSource: formData.milkSource || 'cow',
+      };
+
+      console.log('[MilkScreen] handleUpdate - Updating transaction:', { id: editingTransaction._id, type: editingTransaction.type });
+      await milkService.updateTransaction(editingTransaction._id, transactionData);
+      await loadTransactions();
+
+      // Reset form
+      setFormData({
+        date: new Date().toISOString().split('T')[0],
+        quantity: '',
+        pricePerLiter: '',
+        contactName: '',
+        contactPhone: '',
+        notes: '',
+        paymentType: 'cash',
+        amountReceived: '',
+      });
+      setEditingTransaction(null);
+      setShowForm(false);
+      Alert.alert('Success', `Milk ${editingTransaction.type === 'sale' ? 'sale' : 'purchase'} updated successfully!`);
+    } catch (error) {
+      console.error('Failed to update transaction:', error);
+      Alert.alert('Error', error.message || 'Failed to update transaction. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (transaction) => {
+    // Get transaction type from the transaction object itself
+    const txType = transaction.type || transactionType;
     Alert.alert(
-      `Delete ${transactionType === 'sale' ? 'Sale' : 'Purchase'}`,
-      `Are you sure you want to delete this ${transactionType === 'sale' ? 'sale' : 'purchase'} record?`,
+      `Delete ${txType === 'sale' ? 'Sale' : 'Purchase'}`,
+      `Are you sure you want to delete this ${txType === 'sale' ? 'sale' : 'purchase'} record?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -339,9 +504,10 @@ export default function MilkScreen({ onNavigate, onLogout }) {
           onPress: async () => {
             try {
               setLoading(true);
-              await milkService.deleteTransaction(_id);
+              const transactionId = transaction._id || transaction;
+              await milkService.deleteTransaction(transactionId);
               await loadTransactions(); // Reload from database
-              Alert.alert('Success', `${transactionType === 'sale' ? 'Sale' : 'Purchase'} record deleted!`);
+              Alert.alert('Success', `${txType === 'sale' ? 'Sale' : 'Purchase'} record deleted!`);
             } catch (error) {
               console.error('Failed to delete transaction:', error);
               Alert.alert('Error', error.message || 'Failed to delete transaction. Please try again.');
@@ -371,6 +537,34 @@ export default function MilkScreen({ onNavigate, onLogout }) {
     const phone = transactionType === 'sale' ? transaction.buyerPhone : transaction.sellerPhone;
     return phone ? `${name} (${phone})` : name || '';
   };
+
+  // Monthly sales summary by milk source (only for sales)
+  const getMonthlySalesByMilkSource = () => {
+    if (transactionType !== 'sale') return {};
+
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const monthlySales = transactions.filter((t) => {
+      if (t.type !== 'sale') return false;
+      const tDate = new Date(t.date);
+      return tDate.getFullYear() === year && tDate.getMonth() + 1 === month;
+    });
+
+    const sourceSummary = { cow: { quantity: 0, totalAmount: 0 }, buffalo: { quantity: 0, totalAmount: 0 }, sheep: { quantity: 0, totalAmount: 0 }, goat: { quantity: 0, totalAmount: 0 } };
+
+    monthlySales.forEach((sale) => {
+      const src = sale.milkSource || 'cow';
+      if (sourceSummary[src]) {
+        sourceSummary[src].quantity += sale.quantity;
+        sourceSummary[src].totalAmount += sale.totalAmount;
+      } else {
+        sourceSummary[src] = { quantity: sale.quantity, totalAmount: sale.totalAmount };
+      }
+    });
+
+    return sourceSummary;
+  };
+
+  const monthlySalesByMilkSource = getMonthlySalesByMilkSource();
 
   // Monthly sales summary by buyer (only for sales)
   const getMonthlySalesByBuyer = () => {
@@ -472,7 +666,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
   return (
     <View style={styles.container}>
       <HeaderWithMenu
-        title="Dairy Farm Management"
+        title="HiTech Dairy Farm"
         subtitle="Milk"
         onNavigate={onNavigate}
         isAuthenticated={true}
@@ -588,50 +782,76 @@ export default function MilkScreen({ onNavigate, onLogout }) {
               </ScrollView>
             </View>
 
-            {monthlyBuyers.length > 0 ? (
+            {monthlyBuyers.length > 0 || Object.values(monthlySalesByMilkSource).some((s) => s.quantity > 0) ? (
               <View style={styles.buyerSummaryCard}>
                 <Text style={styles.buyerSummaryTitle}>
                   Monthly Sales Summary - {getMonthDisplayName(selectedMonth)}
                 </Text>
-                <View style={styles.buyerSummaryHeader}>
-                  <Text style={styles.buyerSummaryHeaderText}>Buyer</Text>
-                  <Text style={styles.buyerSummaryHeaderText}>Quantity</Text>
-                  <Text style={styles.buyerSummaryHeaderText}>Total</Text>
-                </View>
-                {monthlyBuyers.map((buyerKey) => {
-                  const summary = monthlySalesByBuyer[buyerKey];
-                  const displayName = summary.phone 
-                    ? `${summary.name} (${summary.phone})` 
-                    : summary.name;
-                  return (
-                    <View key={buyerKey} style={styles.buyerSummaryRow}>
-                      <View style={styles.buyerNameContainer}>
-                        <Text style={styles.buyerName}>{summary.name}</Text>
-                        {summary.phone && (
-                          <Text style={styles.buyerPhone}>{summary.phone}</Text>
-                        )}
-                      </View>
-                      <Text style={styles.buyerQuantity}>
-                        {summary.quantity.toFixed(2)} L
-                      </Text>
-                      <Text style={styles.buyerAmount}>
-                        {formatCurrency(summary.totalAmount)}
-                      </Text>
+                {Object.keys(monthlySalesByMilkSource).some((k) => monthlySalesByMilkSource[k].quantity > 0) ? (
+                  <>
+                    <View style={styles.milkSourceSummary}>
+                      <Text style={styles.buyerSummaryHeaderText}>Milk Source</Text>
+                      <Text style={styles.buyerSummaryHeaderText}>Qty</Text>
+                      <Text style={styles.buyerSummaryHeaderText}>Amount</Text>
                     </View>
-                  );
-                })}
+                    {Object.entries(monthlySalesByMilkSource).map(([src, data]) => {
+                      if (data.quantity <= 0) return null;
+                      const label = MILK_SOURCE_TYPES.find((s) => s.value === src)?.label || src;
+                      return (
+                        <View key={src} style={styles.buyerSummaryRow}>
+                          <View style={styles.buyerNameContainer}>
+                            <Text style={styles.buyerName}>{label}</Text>
+                          </View>
+                          <Text style={styles.buyerQuantity}>{data.quantity.toFixed(2)} L</Text>
+                          <Text style={styles.buyerAmount}>{formatCurrency(data.totalAmount)}</Text>
+                        </View>
+                      );
+                    })}
+                  </>
+                ) : null}
+                {monthlyBuyers.length > 0 && (
+                  <>
+                    <View style={styles.buyerSummaryHeader}>
+                      <Text style={styles.buyerSummaryHeaderText}>Buyer</Text>
+                      <Text style={styles.buyerSummaryHeaderText}>Quantity</Text>
+                      <Text style={styles.buyerSummaryHeaderText}>Total</Text>
+                    </View>
+                    {monthlyBuyers.map((buyerKey) => {
+                      const summary = monthlySalesByBuyer[buyerKey];
+                      const displayName = summary.phone
+                        ? `${summary.name} (${summary.phone})`
+                        : summary.name;
+                      return (
+                        <View key={buyerKey} style={styles.buyerSummaryRow}>
+                          <View style={styles.buyerNameContainer}>
+                            <Text style={styles.buyerName}>{summary.name}</Text>
+                            {summary.phone && (
+                              <Text style={styles.buyerPhone}>{summary.phone}</Text>
+                            )}
+                          </View>
+                          <Text style={styles.buyerQuantity}>
+                            {summary.quantity.toFixed(2)} L
+                          </Text>
+                          <Text style={styles.buyerAmount}>
+                            {formatCurrency(summary.totalAmount)}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </>
+                )}
                 <View style={styles.buyerSummaryTotal}>
                   <Text style={styles.buyerSummaryTotalLabel}>Grand Total:</Text>
                   <Text style={styles.buyerSummaryTotalQuantity}>
-                    {Object.values(monthlySalesByBuyer)
-                      .reduce((sum, s) => sum + s.quantity, 0)
+                    {Object.values(monthlySalesByMilkSource)
+                      .reduce((sum, s) => sum + (s.quantity || 0), 0)
                       .toFixed(2)}{' '}
                     L
                   </Text>
                   <Text style={styles.buyerSummaryTotalAmount}>
                     {formatCurrency(
-                      Object.values(monthlySalesByBuyer).reduce(
-                        (sum, s) => sum + s.totalAmount,
+                      Object.values(monthlySalesByMilkSource).reduce(
+                        (sum, s) => sum + (s.totalAmount || 0),
                         0
                       )
                     )}
@@ -777,7 +997,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
                 {/* Individual Transactions for the Day */}
                 {dayGroup.transactions.map((transaction) => (
                   <View key={transaction._id} style={styles.transactionCard}>
-                    {/* <View style={styles.transactionHeader}>
+                    <View style={styles.transactionHeader}>
                       <View style={styles.transactionHeaderLeft}>
                         <Text style={styles.transactionTime}>
                           {new Date(transaction.date).toLocaleTimeString('en-US', {
@@ -789,14 +1009,30 @@ export default function MilkScreen({ onNavigate, onLogout }) {
                           {transaction.quantity} Liters @ {formatCurrency(transaction.pricePerLiter)}/L
                         </Text>
                       </View>
-                      <TouchableOpacity
-                        onPress={() => handleDelete(transaction._id)}
-                        style={styles.deleteButton}
-                      >
-                        <Text style={styles.deleteButtonText}>Delete</Text>
-                      </TouchableOpacity>
-                    </View> */}
+                      <View style={styles.transactionActions}>
+                        <TouchableOpacity
+                          onPress={() => handleEdit(transaction)}
+                          style={styles.editButton}
+                        >
+                          <Text style={styles.editButtonText}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleDelete(transaction)}
+                          style={styles.deleteButton}
+                        >
+                          <Text style={styles.deleteButtonText}>Delete</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
                     <View style={styles.transactionDetails}>
+                      {transaction.milkSource && (
+                        <View style={styles.detailRow}>
+                          <Text style={styles.detailLabel}>Milk Source:</Text>
+                          <Text style={styles.detailValue}>
+                            {MILK_SOURCE_TYPES.find((s) => s.value === transaction.milkSource)?.label || transaction.milkSource}
+                          </Text>
+                        </View>
+                      )}
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>{transaction.type === 'sale' ? 'Buyer:' : 'Seller:'}</Text>
                         <View style={styles.detailValueContainer}>
@@ -837,6 +1073,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
         onRequestClose={() => {
           setShowBuyerList(false);
           setSelectedBuyer(null);
+          setBuyerSearchQuery(''); // Clear search when modal closes
           // Don't clear buyersForModal, keep it for next time
         }}
       >
@@ -923,6 +1160,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
                         notes: '',
                         paymentType: 'cash',
                         amountReceived: '',
+                        milkSource: 'cow',
                       });
                       
                       setShowBuyerList(false);
@@ -937,20 +1175,23 @@ export default function MilkScreen({ onNavigate, onLogout }) {
               </ScrollView>
             ) : (
               // Buyer List View
-              <ScrollView 
-                style={styles.buyerListContainer}
-                contentContainerStyle={styles.buyerListContentContainer}
-              >
-                {(() => {
-                  // Use buyersForModal if available, otherwise fall back to buyers
-                  const buyersToShow = buyersForModal.length > 0 ? buyersForModal : buyers;
-                  console.log('[MilkScreen] Rendering buyer list');
-                  console.log('[MilkScreen] buyersForModal count:', buyersForModal.length);
-                  console.log('[MilkScreen] buyers count:', buyers.length);
-                  console.log('[MilkScreen] buyersToShow count:', buyersToShow.length);
-                  console.log('[MilkScreen] buyersToShow data:', buyersToShow);
-                  return buyersToShow.length === 0;
-                })() ? (
+              <View style={{ flex: 1 }}>
+                {/* Search Box */}
+                <View style={styles.searchContainer}>
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search by name or mobile..."
+                    placeholderTextColor="#999"
+                    value={buyerSearchQuery}
+                    onChangeText={setBuyerSearchQuery}
+                    autoCapitalize="none"
+                  />
+                </View>
+                <ScrollView 
+                  style={styles.buyerListContainer}
+                  contentContainerStyle={styles.buyerListContentContainer}
+                >
+                  {filteredBuyers.length === 0 ? (
                   <View style={styles.emptyBuyerList}>
                     <Text style={styles.emptyBuyerListText}>No buyers found</Text>
                     <Text style={styles.emptyBuyerListSubtext}>
@@ -975,7 +1216,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  (buyersForModal.length > 0 ? buyersForModal : buyers).map((buyer, index) => {
+                  filteredBuyers.map((buyer, index) => {
                     console.log(`[MilkScreen] Rendering buyer ${index}:`, buyer);
                     return (
                       <TouchableOpacity
@@ -1011,6 +1252,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
                   })
                 )}
               </ScrollView>
+              </View>
               )}
             </View>
           </View>
@@ -1025,6 +1267,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
         onRequestClose={() => {
           setShowSellerList(false);
           setSelectedSeller(null);
+          setSellerSearchQuery(''); // Clear search when modal closes
           // Don't clear sellersForModal, keep it for next time
         }}
       >
@@ -1111,6 +1354,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
                         notes: '',
                         paymentType: 'cash',
                         amountReceived: '',
+                        milkSource: 'cow',
                       });
                       
                       setShowSellerList(false);
@@ -1125,20 +1369,23 @@ export default function MilkScreen({ onNavigate, onLogout }) {
               </ScrollView>
             ) : (
               // Seller List View
-              <ScrollView 
-                style={styles.buyerListContainer}
-                contentContainerStyle={styles.buyerListContentContainer}
-              >
-                {(() => {
-                  // Use sellersForModal if available, otherwise fall back to sellers
-                  const sellersToShow = sellersForModal.length > 0 ? sellersForModal : sellers;
-                  console.log('[MilkScreen] Rendering seller list');
-                  console.log('[MilkScreen] sellersForModal count:', sellersForModal.length);
-                  console.log('[MilkScreen] sellers count:', sellers.length);
-                  console.log('[MilkScreen] sellersToShow count:', sellersToShow.length);
-                  console.log('[MilkScreen] sellersToShow data:', sellersToShow);
-                  return sellersToShow.length === 0;
-                })() ? (
+              <View style={{ flex: 1 }}>
+                {/* Search Box */}
+                <View style={styles.searchContainer}>
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search by name or mobile..."
+                    placeholderTextColor="#999"
+                    value={sellerSearchQuery}
+                    onChangeText={setSellerSearchQuery}
+                    autoCapitalize="none"
+                  />
+                </View>
+                <ScrollView 
+                  style={styles.buyerListContainer}
+                  contentContainerStyle={styles.buyerListContentContainer}
+                >
+                  {filteredSellers.length === 0 ? (
                   <View style={styles.emptyBuyerList}>
                     <Text style={styles.emptyBuyerListText}>No sellers found</Text>
                     <Text style={styles.emptyBuyerListSubtext}>
@@ -1163,7 +1410,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  (sellersForModal.length > 0 ? sellersForModal : sellers).map((seller, index) => {
+                  filteredSellers.map((seller, index) => {
                     console.log(`[MilkScreen] Rendering seller ${index}:`, seller);
                     return (
                       <TouchableOpacity
@@ -1199,6 +1446,7 @@ export default function MilkScreen({ onNavigate, onLogout }) {
                   })
                 )}
               </ScrollView>
+              </View>
               )}
             </View>
           </View>
@@ -1215,11 +1463,25 @@ export default function MilkScreen({ onNavigate, onLogout }) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Milk {transactionType === 'sale' ? 'Sale' : 'Purchase'}</Text>
+              <Text style={styles.modalTitle}>
+                {editingTransaction ? 'Edit' : 'Add'} Milk {editingTransaction ? (editingTransaction.type === 'sale' ? 'Sale' : 'Purchase') : (transactionType === 'sale' ? 'Sale' : 'Purchase')}
+              </Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowForm(false);
                   setShowContactDropdown(false);
+                  setEditingTransaction(null);
+                  setFormData({
+                    date: new Date().toISOString().split('T')[0],
+                    quantity: '',
+                    pricePerLiter: '',
+                    contactName: '',
+                    contactPhone: '',
+                    notes: '',
+                    paymentType: 'cash',
+                    amountReceived: '',
+                    milkSource: 'cow',
+                  });
                 }}
                 style={styles.closeButton}
               >
@@ -1238,6 +1500,33 @@ export default function MilkScreen({ onNavigate, onLogout }) {
                 onChangeText={(text) => setFormData({ ...formData, date: text })}
                 style={styles.input}
               />
+
+              <Text style={styles.label}>Milk Source *</Text>
+              <View style={styles.milkSourceRow}>
+                {MILK_SOURCE_TYPES.map((src) => {
+                  const isActive = formData.milkSource === src.value;
+                  return (
+                    <TouchableOpacity
+                      key={src.value}
+                      style={[
+                        styles.milkSourceButton,
+                        isActive && styles.milkSourceButtonActive,
+                      ]}
+                      onPress={() => setFormData({ ...formData, milkSource: src.value })}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.milkSourceButtonText,
+                          isActive && styles.milkSourceButtonTextActive,
+                        ]}
+                      >
+                        {src.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
               <Text style={styles.label}>{transactionType === 'sale' ? 'Buyer' : 'Seller'} Name *</Text>
               <View style={styles.contactInputContainer}>
@@ -1377,11 +1666,12 @@ export default function MilkScreen({ onNavigate, onLogout }) {
               />
 
               <Button
-                title={`Save ${transactionType === 'sale' ? 'Sale' : 'Purchase'}`}
+                title={editingTransaction ? `Update ${editingTransaction.type === 'sale' ? 'Sale' : 'Purchase'}` : `Save ${transactionType === 'sale' ? 'Sale' : 'Purchase'}`}
                 onPress={handleAddTransaction}
+                disabled={loading}
                 style={{
                   ...styles.saveButton,
-                  ...(transactionType === 'sale' ? styles.saveButtonSale : styles.saveButtonPurchase),
+                  ...(editingTransaction ? (editingTransaction.type === 'sale' ? styles.saveButtonSale : styles.saveButtonPurchase) : (transactionType === 'sale' ? styles.saveButtonSale : styles.saveButtonPurchase)),
                 }}
               />
             </ScrollView>
@@ -1505,6 +1795,53 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  transactionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  transactionHeaderLeft: {
+    flex: 1,
+  },
+  transactionTime: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 4,
+  },
+  transactionQuantity: {
+    fontSize: 14,
+    color: '#666',
+  },
+  transactionActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editButton: {
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  editButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  deleteButton: {
+    backgroundColor: '#F44336',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   transactionHeader: {
     flexDirection: 'row',
@@ -1698,6 +2035,32 @@ const styles = StyleSheet.create({
   paymentTypeButtonTextActive: {
     color: '#FFFFFF',
   },
+  milkSourceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  milkSourceButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: '#F0F0F0',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  milkSourceButtonActive: {
+    backgroundColor: '#2196F3',
+    borderColor: '#2196F3',
+  },
+  milkSourceButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  milkSourceButtonTextActive: {
+    color: '#FFFFFF',
+  },
   contactInputContainer: {
     marginBottom: 12,
   },
@@ -1830,6 +2193,14 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 15,
     textAlign: 'center',
+  },
+  milkSourceSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingBottom: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: '#2196F3',
+    marginBottom: 10,
   },
   buyerSummaryHeader: {
     flexDirection: 'row',
@@ -2199,6 +2570,21 @@ const styles = StyleSheet.create({
   },
   dayBreakdownAmountPurchase: {
     color: '#4CAF50',
+  },
+  searchContainer: {
+    padding: 15,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  searchInput: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#333',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
 });
 

@@ -21,10 +21,13 @@ export const userService = {
       
       // Handle different response formats
       if (Array.isArray(response)) {
+        console.log(`[userService] Returning ${response.length} users`);
         return response;
       } else if (response && Array.isArray(response.data)) {
+        console.log(`[userService] Returning ${response.data.length} users from data field`);
         return response.data;
       } else if (response && response.users && Array.isArray(response.users)) {
+        console.log(`[userService] Returning ${response.users.length} users from users field`);
         return response.users;
       } else {
         console.warn('[userService] Unexpected response format:', response);
@@ -34,9 +37,13 @@ export const userService = {
       console.error('[userService] Error fetching users:', error);
       console.error('[userService] Error details:', {
         message: error.message,
+        response: error.response,
+        status: error.response?.status,
+        data: error.response?.data,
         stack: error.stack,
       });
-      throw error;
+      // Return empty array instead of throwing to allow graceful degradation
+      return [];
     }
   },
 

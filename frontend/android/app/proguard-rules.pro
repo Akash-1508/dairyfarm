@@ -49,7 +49,7 @@
 -keep class com.facebook.react.uimanager.** { *; }
 
 # Keep all classes in your package
--keep class com.rdf.** { *; }
+-keep class com.hightechdairyfarm.** { *; }
 
 # Keep all JavaScript interface classes
 -keepclassmembers class * {

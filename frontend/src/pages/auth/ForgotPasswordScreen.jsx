@@ -6,37 +6,38 @@ import { authService } from '../../services/auth/authService';
 
 /**
  * Forgot Password Screen
- * Step 1: Enter email/mobile to receive OTP
- * Step 2: Enter OTP and new password
+ * Step 1: Enter email or mobile to receive 4-digit OTP
+ * Step 2: Enter OTP and new password (OTP sent to registered email or mobile)
+ * Master OTP is not shown or used on frontend.
  */
 export default function ForgotPasswordScreen({ onNavigate }) {
   const [step, setStep] = useState(1); // 1: Request OTP, 2: Reset Password
-  const [mobile, setMobile] = useState('');
+  const [emailOrMobile, setEmailOrMobile] = useState('');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((v || '').trim());
+  const isValidMobile = (v) => /^[0-9]{10}$/.test((v || '').trim());
+
   const handleRequestOTP = async () => {
-    if (!mobile.trim()) {
-      Alert.alert('Error', 'Please enter your mobile number');
+    const value = emailOrMobile.trim();
+    if (!value) {
+      Alert.alert('Error', 'Please enter your email or mobile number');
       return;
     }
-
-    // Validate mobile format - must be exactly 10 digits
-    if (!/^[0-9]{10}$/.test(mobile.trim())) {
-      Alert.alert('Error', 'Please enter a valid 10-digit mobile number');
+    if (!isValidEmail(value) && !isValidMobile(value)) {
+      Alert.alert('Error', 'Please enter a valid email or 10-digit mobile number');
       return;
     }
 
     try {
       setLoading(true);
-      await authService.forgotPassword(mobile.trim());
-      
-      // OTP is sent via SMS, not displayed in app
+      await authService.forgotPassword(value);
       Alert.alert(
         'OTP Sent',
-        'OTP has been sent to your mobile number. Please check your SMS.',
+        'A 4-digit OTP has been sent to your registered email or mobile. Please check and enter it below.',
         [{ text: 'OK', onPress: () => setStep(2) }]
       );
     } catch (error) {
@@ -47,21 +48,19 @@ export default function ForgotPasswordScreen({ onNavigate }) {
   };
 
   const handleResetPassword = async () => {
-    if (!otp.trim() || !newPassword || !confirmPassword) {
+    const value = emailOrMobile.trim();
+    if (!value || !otp.trim() || !newPassword || !confirmPassword) {
       Alert.alert('Error', 'Please fill all fields');
       return;
     }
-
     if (otp.trim().length !== 4) {
       Alert.alert('Error', 'OTP must be 4 digits');
       return;
     }
-
     if (newPassword.length < 6) {
       Alert.alert('Error', 'Password must be at least 6 characters');
       return;
     }
-
     if (newPassword !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match');
       return;
@@ -69,8 +68,7 @@ export default function ForgotPasswordScreen({ onNavigate }) {
 
     try {
       setLoading(true);
-      await authService.resetPassword(mobile.trim(), otp.trim(), newPassword);
-      
+      await authService.resetPassword(value, otp.trim(), newPassword);
       Alert.alert(
         'Success',
         'Password reset successful! Please login with your new password.',
@@ -78,9 +76,8 @@ export default function ForgotPasswordScreen({ onNavigate }) {
           {
             text: 'OK',
             onPress: () => {
-              // Reset form and go back to login
               setStep(1);
-              setMobile('');
+              setEmailOrMobile('');
               setOtp('');
               setNewPassword('');
               setConfirmPassword('');
@@ -110,7 +107,7 @@ export default function ForgotPasswordScreen({ onNavigate }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Dairy Farm Management</Text>
+        <Text style={styles.headerTitle}>HiTech Dairy Farm</Text>
         <Text style={styles.headerSubtitle}>Forgot Password</Text>
       </View>
       <ScrollView style={styles.content}>
@@ -119,19 +116,18 @@ export default function ForgotPasswordScreen({ onNavigate }) {
         </Text>
         <Text style={styles.subtitle}>
           {step === 1
-            ? 'Enter your mobile number to receive OTP'
-            : 'Enter the OTP sent to your mobile and set a new password'}
+            ? 'Enter your registered email or mobile number to receive a 4-digit OTP'
+            : 'Enter the 4-digit OTP sent to your email or mobile and set a new password'}
         </Text>
 
         {step === 1 ? (
           <>
             <Input
-              placeholder="Mobile Number (10 digits)"
+              placeholder="Email or Mobile (10 digits)"
               autoCapitalize="none"
-              keyboardType="phone-pad"
-              maxLength={10}
-              value={mobile}
-              onChangeText={setMobile}
+              keyboardType="email-address"
+              value={emailOrMobile}
+              onChangeText={setEmailOrMobile}
               style={styles.input}
             />
             <Button
@@ -143,10 +139,9 @@ export default function ForgotPasswordScreen({ onNavigate }) {
         ) : (
           <>
             <Input
-              placeholder="Mobile Number"
+              placeholder="Email or Mobile"
               autoCapitalize="none"
-              keyboardType="phone-pad"
-              value={mobile}
+              value={emailOrMobile}
               editable={false}
               style={[styles.input, styles.disabledInput]}
             />
@@ -177,6 +172,25 @@ export default function ForgotPasswordScreen({ onNavigate }) {
               onPress={handleResetPassword}
               disabled={loading}
             />
+            <TouchableOpacity
+              style={styles.resendLink}
+              onPress={async () => {
+                const value = emailOrMobile.trim();
+                if (!value) return;
+                try {
+                  setLoading(true);
+                  await authService.resendOtp(value);
+                  Alert.alert('Done', 'OTP resend successfully. Check your mobile.');
+                } catch (e) {
+                  Alert.alert('Error', e?.response?.data?.error || e?.message || 'Resend failed.');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              disabled={loading}
+            >
+              <Text style={styles.resendLinkText}>Resend OTP</Text>
+            </TouchableOpacity>
           </>
         )}
 
@@ -241,6 +255,15 @@ const styles = StyleSheet.create({
   backLink: {
     color: '#4CAF50',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  resendLink: {
+    marginTop: 12,
+    alignSelf: 'center',
+  },
+  resendLinkText: {
+    color: '#4CAF50',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

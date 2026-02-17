@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "RDF Backend (Node + Express)",
+  "description": "HiTech Dairy Farm Backend (Node + Express)",
   "main": "src/server.js",
   "scripts": {
     "dev": "node src/server.js",
@@ -11,7 +11,7 @@
     "build": "echo 'No build step needed for Node.js'"
   },
   "keywords": [],
-  "author": "RDF",
+  "author": "HiTech Dairy Farm",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
@@ -24,6 +24,7 @@
     "mongodb": "^7.1.0",
     "mongoose": "^8.20.0",
     "morgan": "^1.10.0",
+    "nodemailer": "^8.0.1",
     "pdfkit": "^0.15.0",
     "pdfkit-table": "^0.1.99",
     "xlsx": "^0.18.5",

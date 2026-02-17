@@ -260,7 +260,7 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
   return (
     <View style={styles.container}>
       <HeaderWithMenu
-        title="Dairy Farm Management"
+        title="HiTech Dairy Farm"
         subtitle="Milk Sales Report"
         onNavigate={onNavigate}
         isAuthenticated={true}
@@ -426,7 +426,7 @@ export default function MilkSalesReportScreen({ onNavigate, onLogout }) {
             <View style={styles.flowNode}>
               <View style={[styles.flowNodeBox, styles.flowNodeSource]}>
                 <Text style={styles.flowNodeIcon}>🐄</Text>
-                <Text style={styles.flowNodeTitle}>Dairy Farm</Text>
+                <Text style={styles.flowNodeTitle}>HiTech Dairy Farm</Text>
                 <Text style={styles.flowNodeSubtitle}>Milk Source</Text>
               </View>
             </View>

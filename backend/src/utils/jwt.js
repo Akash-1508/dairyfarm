@@ -1,30 +1,11 @@
 const jwt = require("jsonwebtoken");
+const config = require("../config");
 
-// JWT Secret - must be in .env file
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET is not set in environment variables. Please add it to .env file");
-}
+if (!config.jwtSecret) throw new Error("JWT_SECRET not set in .env");
+if (!config.jwtExpiresIn) throw new Error("JWT_EXPIRES_IN not set in .env");
 
-// JWT Expiry - must be in .env file
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN;
-if (!JWT_EXPIRES_IN) {
-  throw new Error("JWT_EXPIRES_IN is not set in environment variables. Please add it to .env file");
-}
-
-// Type assertion after validation
-const JWT_SECRET_VALUE = JWT_SECRET;
-const JWT_EXPIRES_IN_VALUE = JWT_EXPIRES_IN;
-
-/**
- * Generate JWT token with user data
- * @param {Object} payload - User payload (userId, email, mobile, name, role)
- * @returns {string} JWT token
- */
 function generateToken(payload) {
-  return jwt.sign(payload, JWT_SECRET_VALUE, {
-    expiresIn: JWT_EXPIRES_IN_VALUE,
-  });
+  return jwt.sign(payload, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
 }
 
 /**
@@ -34,8 +15,7 @@ function generateToken(payload) {
  */
 function verifyToken(token) {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET_VALUE);
-    return decoded;
+    return jwt.verify(token, config.jwtSecret);
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
       throw new Error("Token expired");
