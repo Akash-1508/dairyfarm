@@ -48,8 +48,8 @@ const port = typeof configPort === "number" && !Number.isNaN(configPort) ? confi
 async function bootstrap() {
   try {
     await connectToDatabase();
-    app.listen(port, () => {
-      console.log(`Backend listening on http://localhost:${port}`);
+    app.listen(port, "0.0.0.0", () => {
+      console.log(`Backend listening on ${port} (accepting connections from emulator/network)`);
     });
   } catch (err) {
     console.error("[bootstrap] Failed to start server:", err);

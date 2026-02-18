@@ -13,15 +13,18 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { milkService } from '../../services/milk/milkService';
 import { buyerService } from '../../services/buyers/buyerService';
+import { paymentService } from '../../services/payments/paymentService';
 import { userService } from '../../services/users/userService';
 import { formatCurrency } from '../../utils/currencyUtils';
 import { authService } from '../../services/auth/authService';
 
 export default function BuyerScreen({ onNavigate, onLogout }) {
   const [transactions, setTransactions] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [buyersData, setBuyersData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedBuyer, setSelectedBuyer] = useState(null);
+  const [logTab, setLogTab] = useState('milk'); // 'milk' | 'cash' for expanded buyer logs
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [editingBuyer, setEditingBuyer] = useState(null);
@@ -51,12 +54,14 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [txData, buyersList] = await Promise.all([
+      const [txData, buyersList, paymentData] = await Promise.all([
         milkService.getTransactions(),
         buyerService.getBuyers().catch(() => []),
+        paymentService.getPayments().catch(() => []),
       ]);
       setTransactions(txData);
       setBuyersData(buyersList);
+      setPayments(paymentData);
     } catch (error) {
       console.error('Failed to load data:', error);
       Alert.alert('Error', 'Failed to load buyer data. Please try again.');
@@ -108,23 +113,40 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       }
     });
 
-    // Return all buyers (including those with no transactions yet)
+    // Pending balance = milk total - payments received from this buyer
+    const buyerList = Array.from(buyerMap.values());
+    buyerList.forEach((buyer) => {
+      const phone = (buyer.phone || '').trim();
+      const totalPaid = payments
+        .filter((p) => String(p.customerMobile || '').trim() === phone)
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+      buyer.pendingBalance = (buyer.totalAmount || 0) - totalPaid;
+    });
+
     // Sort by total amount (highest first), then by name
-    return Array.from(buyerMap.values())
-      .sort((a, b) => {
-        // First sort by total amount (descending)
-        if (b.totalAmount !== a.totalAmount) {
-          return b.totalAmount - a.totalAmount;
-        }
-        // If amounts are equal, sort by name (ascending)
-        return a.name.localeCompare(b.name);
-      });
-  }, [transactions, buyersData]);
+    return buyerList.sort((a, b) => {
+      if (b.totalAmount !== a.totalAmount) {
+        return b.totalAmount - a.totalAmount;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [transactions, buyersData, payments]);
 
   const getBuyerTransactions = (phone) => {
     return transactions
       .filter((tx) => tx.type === 'sale' && tx.buyerPhone?.trim() === phone.trim())
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
+
+  const getBuyerCashTransactions = (phone) => {
+    const p = String(phone || '').trim();
+    return payments
+      .filter(
+        (pay) =>
+          String(pay.customerMobile || '').trim() === p &&
+          String(pay.paymentType || 'cash').toLowerCase() === 'cash'
+      )
+      .sort((a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
   };
 
   const formatDate = (date) => {
@@ -295,12 +317,20 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
 
             {buyers.map((buyer, index) => {
               const buyerTransactions = getBuyerTransactions(buyer.phone);
+              const buyerCashTransactions = getBuyerCashTransactions(buyer.phone);
               const isExpanded = selectedBuyer === buyer.phone;
 
               return (
                 <View key={index} style={styles.buyerCard}>
                   <TouchableOpacity
-                    onPress={() => setSelectedBuyer(isExpanded ? null : buyer.phone)}
+                    onPress={() => {
+                      if (isExpanded) {
+                        setSelectedBuyer(null);
+                      } else {
+                        setSelectedBuyer(buyer.phone);
+                        setLogTab('milk');
+                      }
+                    }}
                     activeOpacity={0.7}
                   >
                     <View style={styles.buyerHeader}>
@@ -333,6 +363,22 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                         </Text>
                       )}
                     </View>
+                    <View style={styles.pendingRow}>
+                      <Text style={styles.pendingLabel}>Balance: </Text>
+                      <Text
+                        style={[
+                          styles.pendingAmount,
+                          (buyer.pendingBalance || 0) > 0 && styles.pendingAmountDue,
+                          (buyer.pendingBalance || 0) < 0 && styles.pendingAmountAdvance,
+                        ]}
+                      >
+                        {(buyer.pendingBalance || 0) > 0
+                          ? `${formatCurrency(buyer.pendingBalance)} pending`
+                          : (buyer.pendingBalance || 0) < 0
+                            ? `${formatCurrency(-buyer.pendingBalance)} advance`
+                            : 'Settled'}
+                      </Text>
+                    </View>
                     {(buyer.fixedPrice || buyer.dailyQuantity) && (
                       <View style={styles.buyerDetails}>
                         {buyer.fixedPrice && (
@@ -349,25 +395,76 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                     )}
                   </TouchableOpacity>
 
-                  {isExpanded && buyerTransactions.length > 0 && (
+                  {isExpanded && (
                     <View style={styles.transactionsContainer}>
-                      <Text style={styles.transactionsTitle}>Transaction History</Text>
-                      {buyerTransactions.map((tx) => (
-                        <View key={tx._id} style={styles.transactionItem}>
-                          <View style={styles.transactionRow}>
-                            <Text style={styles.transactionDate}>{formatDate(new Date(tx.date))}</Text>
-                            <Text style={styles.transactionAmount}>{formatCurrency(tx.totalAmount)}</Text>
-                          </View>
-                          <View style={styles.transactionRow}>
-                            <Text style={styles.transactionDetails}>
-                              {tx.quantity.toFixed(2)} L @ {formatCurrency(tx.pricePerLiter)}/L
-                            </Text>
-                          </View>
-                          {tx.notes && (
-                            <Text style={styles.transactionNotes}>{tx.notes}</Text>
+                      <View style={styles.logTabs}>
+                        <TouchableOpacity
+                          style={[styles.logTab, logTab === 'milk' && styles.logTabActive]}
+                          onPress={() => setLogTab('milk')}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.logTabText, logTab === 'milk' && styles.logTabTextActive]}>
+                            Milk Transactions ({buyerTransactions.length})
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.logTab, logTab === 'cash' && styles.logTabActive]}
+                          onPress={() => setLogTab('cash')}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.logTabText, logTab === 'cash' && styles.logTabTextActive]}>
+                            Cash Transactions ({buyerCashTransactions.length})
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {logTab === 'milk' && (
+                        <>
+                          {buyerTransactions.length > 0 ? (
+                            buyerTransactions.map((tx) => (
+                              <View key={tx._id} style={styles.transactionItem}>
+                                <View style={styles.transactionRow}>
+                                  <Text style={styles.transactionDate}>{formatDate(new Date(tx.date))}</Text>
+                                  <Text style={styles.transactionAmount}>{formatCurrency(tx.totalAmount)}</Text>
+                                </View>
+                                <View style={styles.transactionRow}>
+                                  <Text style={styles.transactionDetails}>
+                                    {tx.quantity.toFixed(2)} L @ {formatCurrency(tx.pricePerLiter)}/L
+                                  </Text>
+                                </View>
+                                {tx.notes && (
+                                  <Text style={styles.transactionNotes}>{tx.notes}</Text>
+                                )}
+                              </View>
+                            ))
+                          ) : (
+                            <Text style={styles.noLogsText}>No milk transactions yet.</Text>
                           )}
-                        </View>
-                      ))}
+                        </>
+                      )}
+
+                      {logTab === 'cash' && (
+                        <>
+                          {buyerCashTransactions.length > 0 ? (
+                            buyerCashTransactions.map((pay) => (
+                              <View key={pay._id} style={styles.transactionItem}>
+                                <View style={styles.transactionRow}>
+                                  <Text style={styles.transactionDate}>{formatDate(pay.paymentDate)}</Text>
+                                  <Text style={styles.transactionAmount}>{formatCurrency(pay.amount)}</Text>
+                                </View>
+                                <View style={styles.transactionRow}>
+                                  <Text style={styles.transactionDetails}>
+                                    {pay.paymentDirection ? `Type: ${pay.paymentDirection}` : 'Cash payment'}
+                                  </Text>
+                                </View>
+                                {pay.notes ? <Text style={styles.transactionNotes}>{pay.notes}</Text> : null}
+                              </View>
+                            ))
+                          ) : (
+                            <Text style={styles.noLogsText}>No cash transactions yet.</Text>
+                          )}
+                        </>
+                      )}
                     </View>
                   )}
                 </View>
@@ -652,17 +749,66 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
   },
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E8E8E8',
+  },
+  pendingLabel: {
+    fontSize: 13,
+    color: '#555',
+    fontWeight: '600',
+  },
+  pendingAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+  },
+  pendingAmountDue: {
+    color: '#D32F2F',
+  },
+  pendingAmountAdvance: {
+    color: '#2E7D32',
+  },
   transactionsContainer: {
     marginTop: 15,
     paddingTop: 15,
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',
   },
-  transactionsTitle: {
-    fontSize: 16,
+  logTabs: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    backgroundColor: '#E8E8E8',
+    borderRadius: 8,
+    padding: 4,
+  },
+  logTab: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  logTabActive: {
+    backgroundColor: '#2196F3',
+  },
+  logTabText: {
+    fontSize: 13,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 10,
+    color: '#555',
+  },
+  logTabTextActive: {
+    color: '#FFFFFF',
+  },
+  noLogsText: {
+    fontSize: 13,
+    color: '#777',
+    marginTop: 4,
+    marginBottom: 8,
   },
   transactionItem: {
     backgroundColor: '#F9F9F9',

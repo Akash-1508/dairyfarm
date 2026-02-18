@@ -262,9 +262,7 @@ const forgotPassword = async (req, res) => {
       : await findUserByMobile(emailOrMobile);
     
     if (!user) {
-      return res.json({ 
-        message: "If the email or mobile is registered, an OTP has been sent to your registered email or mobile."
-      });
+      return res.status(404).json({ error: "User not found. This email or mobile is not registered." });
     }
     
     const mobile = user.mobile;

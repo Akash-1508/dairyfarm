@@ -34,14 +34,23 @@ export default function ForgotPasswordScreen({ onNavigate }) {
 
     try {
       setLoading(true);
-      await authService.forgotPassword(value);
-      Alert.alert(
-        'OTP Sent',
-        'A 4-digit OTP has been sent to your registered email or mobile. Please check and enter it below.',
-        [{ text: 'OK', onPress: () => setStep(2) }]
-      );
+      const result = await authService.forgotPassword(value);
+      // Only show success when backend actually sent OTP (has "otp" / "sent" in message)
+      const serverMsg = (result && result.message) ? String(result.message) : '';
+      const isRealSuccess = /otp has been sent|otp sent/i.test(serverMsg);
+      if (isRealSuccess) {
+        Alert.alert(
+          'OTP Sent',
+          'A 4-digit OTP has been sent to your registered email or mobile. Please check and enter it below.',
+          [{ text: 'OK', onPress: () => setStep(2) }]
+        );
+      } else {
+        // Backend returned 200 but with generic/no OTP message (e.g. user not found in old API)
+        Alert.alert('Error', serverMsg || 'User not found. This email or mobile is not registered.');
+      }
     } catch (error) {
-      Alert.alert('Error', error?.message || 'Failed to send OTP. Please try again.');
+      const msg = error?.response?.data?.error || error?.message || 'Failed to send OTP. Please try again.';
+      Alert.alert('Error', msg);
     } finally {
       setLoading(false);
     }

@@ -23,6 +23,7 @@ const baseMenuItems = [
   { id: 7, title: 'Buyer', icon: '👥' },
   { id: 8, title: 'Seller', icon: '🏪' },
   { id: 11, title: 'Payments', icon: '💵' },
+  { id: 12, title: 'Pending Payments', icon: '📋' },
 ];
 
 export default function HeaderWithMenu({ title, subtitle, onNavigate, isAuthenticated = false, onLogout }) {

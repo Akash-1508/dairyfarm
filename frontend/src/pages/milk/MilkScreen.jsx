@@ -23,7 +23,7 @@ import { MILK_SOURCE_TYPES } from '../../constants';
  * Unified Milk Screen
  * Manage both milk sales and purchase transactions
  */
-export default function MilkScreen({ onNavigate, onLogout }) {
+export default function MilkScreen({ onNavigate, onLogout, openAddSale, onConsumedNavParam }) {
   const [transactionType, setTransactionType] = useState('purchase');
   const [transactions, setTransactions] = useState([]);
   const [buyers, setBuyers] = useState([]); // Buyers from buyers table
@@ -64,6 +64,16 @@ export default function MilkScreen({ onNavigate, onLogout }) {
     loadBuyers();
     loadSellers();
   }, []);
+
+  // Quick-add sale from Dashboard FAB
+  useEffect(() => {
+    if (openAddSale) {
+      setTransactionType('sale');
+      setShowForm(true);
+      setShowContactDropdown(false);
+      onConsumedNavParam?.();
+    }
+  }, [openAddSale, onConsumedNavParam]);
 
   const loadBuyers = async () => {
     try {
@@ -1678,6 +1688,19 @@ export default function MilkScreen({ onNavigate, onLogout }) {
           </View>
         </View>
       </Modal>
+
+      {transactionType === 'sale' && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => {
+            setShowForm(true);
+            setShowContactDropdown(false);
+          }}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -1771,6 +1794,28 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2196F3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  fabText: {
+    fontSize: 28,
+    fontWeight: '300',
+    color: '#fff',
+    lineHeight: 32,
   },
   emptyContainer: {
     alignItems: 'center',

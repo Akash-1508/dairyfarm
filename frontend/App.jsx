@@ -12,6 +12,7 @@ import SellerScreen from './src/pages/sellers/SellerScreen';
 import AddAdminScreen from './src/pages/admin/AddAdminScreen';
 import AdminListScreen from './src/pages/admin/AdminListScreen';
 import PaymentScreen from './src/pages/payments/PaymentScreen';
+import PendingPaymentsScreen from './src/pages/payments/PendingPaymentsScreen';
 import LoginScreen from './src/pages/auth/LoginScreen';
 import SignupScreen from './src/pages/auth/SignupScreen';
 import ForgotPasswordScreen from './src/pages/auth/ForgotPasswordScreen';
@@ -22,6 +23,7 @@ function App() {
   const isDarkMode = useColorScheme() === 'dark';
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentScreen, setCurrentScreen] = useState('Login/Signup');
+  const [navParams, setNavParams] = useState({});
   const [isLoading, setIsLoading] = useState(true);
 
   const handleTokenExpired = async () => {
@@ -68,9 +70,9 @@ function App() {
     checkAuth();
   }, []);
 
-  const navigateToScreen = (screen) => {
+  const navigateToScreen = (screen, params) => {
     // Protected screens - only accessible after login
-    const protectedScreens = ['Dashboard', 'Animals', 'Milk', 'Chara', 'Profit/Loss', 'Milk Sales Report', 'Buyer', 'Seller', 'Payments', 'Admin List', 'Add Admin'];
+    const protectedScreens = ['Dashboard', 'Animals', 'Milk', 'Chara', 'Profit/Loss', 'Milk Sales Report', 'Buyer', 'Seller', 'Payments', 'Pending Payments', 'Admin List', 'Add Admin'];
     
     // If trying to access protected screen without login, redirect to login
     if (protectedScreens.includes(screen) && !isAuthenticated) {
@@ -81,10 +83,12 @@ function App() {
     // Allow navigation to login/signup/forgot password screens always
     if (screen === 'Login/Signup' || screen === 'Signup' || screen === 'ForgotPassword') {
       setCurrentScreen(screen);
+      setNavParams((p) => ({ ...p, [screen]: undefined }));
       return;
     }
     
     setCurrentScreen(screen);
+    setNavParams((p) => ({ ...p, [screen]: params }));
   };
 
   const handleLoginSuccess = () => {
@@ -123,7 +127,14 @@ function App() {
       case 'Animals':
         return <AnimalScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Milk':
-        return <MilkScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
+        return (
+          <MilkScreen
+            onNavigate={navigateToScreen}
+            onLogout={handleLogout}
+            openAddSale={navParams['Milk']?.openAddSale}
+            onConsumedNavParam={() => setNavParams((p) => ({ ...p, Milk: undefined }))}
+          />
+        );
       case 'Chara':
         return <CharaScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Profit/Loss':
@@ -140,6 +151,8 @@ function App() {
         return <AddAdminScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Payments':
         return <PaymentScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
+      case 'Pending Payments':
+        return <PendingPaymentsScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Login/Signup':
         return <LoginScreen onNavigate={navigateToScreen} onLoginSuccess={handleLoginSuccess} />;
       case 'Signup':

@@ -724,7 +724,7 @@ export default function PaymentScreen({ onNavigate, onLogout }) {
           activeOpacity={0.7}
         >
           <Text style={styles.addButtonText}>
-            {activePaymentTab === 'seller' ? '+ Add Payment (to seller)' : '+ Add Cash Payment'}
+            {activePaymentTab === 'seller' ? '+ Add Payment (to seller)' : '+ Add Payment'}
           </Text>
         </TouchableOpacity>
 
@@ -785,7 +785,7 @@ export default function PaymentScreen({ onNavigate, onLogout }) {
                             setFormData((prev) => ({ ...prev, customerId: cust.userId, customerName: cust.name, customerMobile: cust.mobile }));
                             setShowAddForm(true);
                           } else {
-                            Alert.alert('Note', 'Select this customer from "Add Cash Payment" and enter amount.');
+                            Alert.alert('Note', 'Select this customer from "Add Payment" and enter amount.');
                             setShowAddForm(true);
                           }
                         }}
@@ -917,7 +917,7 @@ export default function PaymentScreen({ onNavigate, onLogout }) {
                 <Text style={styles.emptySubtext}>
                   {activePaymentTab === 'seller'
                     ? 'Milk purchases from sellers will appear here. Use "Add Payment" to record payment to a seller.'
-                    : 'Milk sales with cash will appear here. Use "Add Cash Payment" to record a payment.'}
+                    : 'Milk sales with cash will appear here. Use "Add Payment" to record a payment.'}
                 </Text>
               </View>
             )}
@@ -1049,7 +1049,7 @@ export default function PaymentScreen({ onNavigate, onLogout }) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{activePaymentTab === 'seller' ? 'Add Payment (to seller)' : 'Add Cash Payment'}</Text>
+              <Text style={styles.modalTitle}>{activePaymentTab === 'seller' ? 'Add Payment (to seller)' : 'Add Payment'}</Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowAddForm(false);
