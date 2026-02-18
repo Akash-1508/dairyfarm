@@ -26,6 +26,15 @@ const baseMenuItems = [
   { id: 12, title: 'Pending Payments', icon: '📋' },
 ];
 
+const buyerMenuItems = [
+  { id: 21, title: 'Buyer Dashboard', icon: '📊' },
+  { id: 22, title: 'Milk Request', icon: '🥛' },
+  { id: 23, title: 'Transaction History', icon: '📜' },
+  { id: 24, title: 'Payment History', icon: '💵' },
+  { id: 25, title: 'Pending Payment', icon: '📋' },
+  { id: 26, title: 'Pay', icon: '💳' },
+];
+
 export default function HeaderWithMenu({ title, subtitle, onNavigate, isAuthenticated = false, onLogout }) {
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -38,13 +47,14 @@ export default function HeaderWithMenu({ title, subtitle, onNavigate, isAuthenti
     load();
   }, [isAuthenticated]);
 
+  const isBuyer = currentUser?.role === 2;
   const isAdmin = currentUser?.role === 0 || currentUser?.role === 1;
-  const menuItems = [
-    ...baseMenuItems,
-    ...(isAdmin ? [
-      { id: 9, title: 'Admin List', icon: '👥' },
-    ] : []),
-  ];
+  const menuItems = isBuyer
+    ? buyerMenuItems
+    : [
+        ...baseMenuItems,
+        ...(isAdmin ? [{ id: 9, title: 'Admin List', icon: '👥' }] : []),
+      ];
   const [showDrawer, setShowDrawer] = useState(false);
   const slideAnim = useRef(new Animated.Value(-width)).current;
 

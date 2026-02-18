@@ -13,6 +13,11 @@ import AddAdminScreen from './src/pages/admin/AddAdminScreen';
 import AdminListScreen from './src/pages/admin/AdminListScreen';
 import PaymentScreen from './src/pages/payments/PaymentScreen';
 import PendingPaymentsScreen from './src/pages/payments/PendingPaymentsScreen';
+import BuyerDashboardScreen from './src/pages/buyerApp/BuyerDashboardScreen';
+import BuyerMilkRequestScreen from './src/pages/buyerApp/BuyerMilkRequestScreen';
+import BuyerTransactionHistoryScreen from './src/pages/buyerApp/BuyerTransactionHistoryScreen';
+import BuyerPaymentHistoryScreen from './src/pages/buyerApp/BuyerPaymentHistoryScreen';
+import BuyerPendingPaymentScreen from './src/pages/buyerApp/BuyerPendingPaymentScreen';
 import LoginScreen from './src/pages/auth/LoginScreen';
 import SignupScreen from './src/pages/auth/SignupScreen';
 import ForgotPasswordScreen from './src/pages/auth/ForgotPasswordScreen';
@@ -22,6 +27,7 @@ import { setOnTokenExpired } from './src/services/api/apiClient';
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userRole, setUserRole] = useState(null); // 0,1 = admin; 2 = buyer
   const [currentScreen, setCurrentScreen] = useState('Login/Signup');
   const [navParams, setNavParams] = useState({});
   const [isLoading, setIsLoading] = useState(true);
@@ -48,12 +54,16 @@ function App() {
       try {
         const token = await authService.checkAuthToken();
         if (token) {
-          // Token exists, user is authenticated
+          const user = await authService.getCurrentUser();
+          setUserRole(user?.role ?? null);
           setIsAuthenticated(true);
-          setCurrentScreen('Dashboard');
+          if (user?.role === 2) {
+            setCurrentScreen('Buyer Dashboard');
+          } else {
+            setCurrentScreen('Dashboard');
+          }
           console.log('[App] Auto-login successful');
         } else {
-          // No token, show login screen
           setIsAuthenticated(false);
           setCurrentScreen('Login/Signup');
           console.log('[App] No saved token, showing login');
@@ -72,7 +82,7 @@ function App() {
 
   const navigateToScreen = (screen, params) => {
     // Protected screens - only accessible after login
-    const protectedScreens = ['Dashboard', 'Animals', 'Milk', 'Chara', 'Profit/Loss', 'Milk Sales Report', 'Buyer', 'Seller', 'Payments', 'Pending Payments', 'Admin List', 'Add Admin'];
+    const protectedScreens = ['Dashboard', 'Animals', 'Milk', 'Chara', 'Profit/Loss', 'Milk Sales Report', 'Buyer', 'Seller', 'Payments', 'Pending Payments', 'Admin List', 'Add Admin', 'Buyer Dashboard', 'Milk Request', 'Transaction History', 'Payment History', 'Pending Payment', 'Pay'];
     
     // If trying to access protected screen without login, redirect to login
     if (protectedScreens.includes(screen) && !isAuthenticated) {
@@ -91,9 +101,20 @@ function App() {
     setNavParams((p) => ({ ...p, [screen]: params }));
   };
 
-  const handleLoginSuccess = () => {
-    setIsAuthenticated(true);
-    setCurrentScreen('Dashboard');
+  const handleLoginSuccess = async () => {
+    try {
+      const user = await authService.getCurrentUser();
+      setUserRole(user?.role ?? null);
+      setIsAuthenticated(true);
+      if (user?.role === 2) {
+        setCurrentScreen('Buyer Dashboard');
+      } else {
+        setCurrentScreen('Dashboard');
+      }
+    } catch (_) {
+      setIsAuthenticated(true);
+      setCurrentScreen('Dashboard');
+    }
   };
 
   const handleLogout = async () => {
@@ -102,6 +123,7 @@ function App() {
     } catch (error) {
       console.error('Logout error:', error);
     }
+    setUserRole(null);
     setIsAuthenticated(false);
     setCurrentScreen('Login/Signup');
   };
@@ -153,11 +175,24 @@ function App() {
         return <PaymentScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Pending Payments':
         return <PendingPaymentsScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
+      case 'Buyer Dashboard':
+        return <BuyerDashboardScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
+      case 'Milk Request':
+        return <BuyerMilkRequestScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
+      case 'Transaction History':
+        return <BuyerTransactionHistoryScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
+      case 'Payment History':
+        return <BuyerPaymentHistoryScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
+      case 'Pending Payment':
+        return <BuyerPendingPaymentScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
+      case 'Pay':
+        return <BuyerPendingPaymentScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Login/Signup':
         return <LoginScreen onNavigate={navigateToScreen} onLoginSuccess={handleLoginSuccess} />;
       case 'Signup':
         return <SignupScreen onNavigate={navigateToScreen} />;
       default:
+        if (userRole === 2) return <BuyerDashboardScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
         return <DashboardScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
     }
   };

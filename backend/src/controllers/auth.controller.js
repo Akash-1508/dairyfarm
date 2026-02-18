@@ -304,6 +304,8 @@ const resetPassword = async (req, res) => {
   const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailOrMobile);
   
   try {
+
+    console.log(otp, 'otp', config.masterOtp, 'config.masterOtp');
     const isMasterOTP = otp.trim() === config.masterOtp;
     
     const user = isEmail

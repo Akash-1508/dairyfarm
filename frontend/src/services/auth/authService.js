@@ -100,5 +100,34 @@ export const authService = {
     const res = await apiClient.post('/auth/resend-otp', { emailOrMobile });
     return res;
   },
+
+  /**
+   * Send OTP for login (uses same API as Forgot Password - sends OTP to registered mobile).
+   * @param {string} mobile - 10-digit mobile number
+   */
+  sendOtpForLogin: async (mobile) => {
+    const res = await apiClient.post('/auth/forgot-password', { emailOrMobile: mobile });
+    return res;
+  },
+
+  /**
+   * Login with OTP (verify OTP and get token - same OTP flow as forgot password).
+   * @param {string} mobile - 10-digit mobile number
+   * @param {string} otp - 4-digit OTP
+   */
+  loginWithOtp: async (mobile, otp) => {
+    const res = await apiClient.post('/auth/verify-otp', { mobile, otp });
+    if (res?.data?.token) {
+      await setAuthToken(res.data.token);
+      if (res.data.user) {
+        try {
+          await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(res.data.user));
+        } catch (error) {
+          console.error('[authService] Error saving user data:', error);
+        }
+      }
+    }
+    return res?.data?.user;
+  },
 };
 

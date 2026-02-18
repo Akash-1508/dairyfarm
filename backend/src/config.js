@@ -21,7 +21,7 @@ module.exports = {
   mongoUri: get('MONGO_URI'),
 
   // Auth – master OTP (backend only)
-  masterOtp: get('MASTER_OTP') || '1508',
+  masterOtp: get('MASTER_OTP') || '0903',
 
   // MSG91 – ek set (MYPIE / MIPIE / MSG91 koi bhi .env mein ho)
   msg91AuthKey: get('AUTH_KEY') || get('MYPIE_MSG91_AUTH_KEY') || get('MIPIE_MSG91_AUTH_KEY') || get('MSG91_AUTH_KEY'),
