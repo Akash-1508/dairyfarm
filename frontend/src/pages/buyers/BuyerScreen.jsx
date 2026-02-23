@@ -14,6 +14,7 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { milkService } from '../../services/milk/milkService';
 import { buyerService } from '../../services/buyers/buyerService';
+import { sellerService } from '../../services/sellers/sellerService';
 import { paymentService } from '../../services/payments/paymentService';
 import { userService } from '../../services/users/userService';
 import { formatCurrency } from '../../utils/currencyUtils';
@@ -46,6 +47,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
   const [addPaymentLoading, setAddPaymentLoading] = useState(false);
   const [paymentForm, setPaymentForm] = useState({ amount: '', date: '' });
   const [buyerFilterTab, setBuyerFilterTab] = useState('active'); // 'active' | 'inactive'
+  const [addAsSellerLoading, setAddAsSellerLoading] = useState(null);
 
   const canEditUsers = currentUser?.role === 0 || currentUser?.role === 1;
 
@@ -94,7 +96,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       });
       setShowAddMilkModal(false);
       setAddMilkBuyer(null);
-      await loadData();
+      await loadData(true);
       Alert.alert('Success', 'Milk transaction added.');
     } catch (e) {
       Alert.alert('Error', e?.message || 'Failed to add transaction.');
@@ -134,7 +136,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       });
       setShowAddPaymentModal(false);
       setAddPaymentBuyer(null);
-      await loadData();
+      await loadData(true);
       Alert.alert('Success', 'Payment recorded.');
     } catch (e) {
       Alert.alert('Error', e?.message || 'Failed to add payment.');
@@ -155,9 +157,9 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
     loadUser();
   }, []);
 
-  const loadData = async () => {
+  const loadData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      setLoading(true);
       const [txData, buyersList, paymentData] = await Promise.all([
         milkService.getTransactions(),
         buyerService.getBuyers().catch(() => []),
@@ -168,9 +170,9 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       setPayments(paymentData);
     } catch (error) {
       console.error('Failed to load data:', error);
-      Alert.alert('Error', 'Failed to load buyer data. Please try again.');
+      if (!silent) Alert.alert('Error', 'Failed to load buyer data. Please try again.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -194,6 +196,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
           fixedPrice: buyer.rate,
           dailyQuantity: buyer.quantity,
           active: buyer.active !== false,
+          isAlsoSeller: buyer.isAlsoSeller === true,
         });
       }
     });
@@ -229,13 +232,8 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       buyer.pendingBalance = (buyer.totalAmount || 0) - totalPaid;
     });
 
-    // Sort by total amount (highest first), then by name
-    return buyerList.sort((a, b) => {
-      if (b.totalAmount !== a.totalAmount) {
-        return b.totalAmount - a.totalAmount;
-      }
-      return a.name.localeCompare(b.name);
-    });
+    // Sort A-Z by name for easy finding
+    return buyerList.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en'));
   }, [transactions, buyersData, payments]);
 
   const filteredBuyers = useMemo(
@@ -306,7 +304,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       });
       setShowEditForm(false);
       setEditingBuyer(null);
-      await loadData();
+      await loadData(true);
       Alert.alert('Success', 'Buyer updated successfully!');
     } catch (error) {
       console.error('Failed to update buyer:', error);
@@ -376,9 +374,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       // Reset form
       setFormData({ name: '', mobile: '', email: '', milkFixedPrice: '', dailyMilkQuantity: '' });
       setShowAddForm(false);
-      
-      // Reload data to show new buyer immediately
-      await loadData();
+      await loadData(true);
       
       // Show success message after data is loaded
       Alert.alert('Success', 'Buyer created successfully!');
@@ -511,6 +507,32 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                           >
                             <Text style={styles.editButtonText}>Edit</Text>
                           </TouchableOpacity>
+                        )}
+                        {canEditUsers && buyer._id && !buyer.isAlsoSeller && (
+                          <TouchableOpacity
+                            style={styles.addAsSellerButton}
+                            onPress={async () => {
+                              setAddAsSellerLoading(buyer._id);
+                              try {
+                                await sellerService.addSellerFromBuyer(buyer._id);
+                                await loadData(true);
+                                Alert.alert('Done', `${buyer.name} is now also in Seller list. Payment & milk can be managed from both Buyer and Seller screens.`);
+                              } catch (e) {
+                                Alert.alert('Error', e?.message || 'Failed to add as seller.');
+                              } finally {
+                                setAddAsSellerLoading(null);
+                              }
+                            }}
+                            disabled={!!addAsSellerLoading}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.addAsSellerButtonText}>
+                              {addAsSellerLoading === buyer._id ? '...' : 'Add as Seller'}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                        {buyer.isAlsoSeller && (
+                          <Text style={styles.alsoSellerBadge}>Buyer + Seller</Text>
                         )}
                         <Text style={styles.buyerAmount}>{formatCurrency(buyer.totalAmount)}</Text>
                         <Text style={styles.buyerQuantity}>{buyer.totalQuantity.toFixed(2)} L</Text>
@@ -1070,6 +1092,26 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  addAsSellerButton: {
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginBottom: 6,
+    marginLeft: 6,
+  },
+  addAsSellerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  alsoSellerBadge: {
+    fontSize: 11,
+    color: '#1976D2',
+    fontWeight: '600',
+    marginBottom: 6,
+    marginLeft: 4,
   },
   buyerStats: {
     flexDirection: 'row',

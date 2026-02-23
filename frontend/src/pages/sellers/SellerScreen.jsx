@@ -13,6 +13,7 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { milkService } from '../../services/milk/milkService';
 import { sellerService } from '../../services/sellers/sellerService';
+import { buyerService } from '../../services/buyers/buyerService';
 import { formatCurrency } from '../../utils/currencyUtils';
 import { authService } from '../../services/auth/authService';
 
@@ -29,6 +30,7 @@ export default function SellerScreen({ onNavigate, onLogout }) {
     milkFixedPrice: '',
     dailyMilkQuantity: '',
   });
+  const [addAsBuyerLoading, setAddAsBuyerLoading] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -63,13 +65,16 @@ export default function SellerScreen({ onNavigate, onLogout }) {
       if (seller.mobile) {
         const key = seller.mobile.trim();
         sellerMap.set(key, {
+          _id: seller._id,
+          userId: seller.userId,
           name: seller.name,
           phone: seller.mobile,
           totalQuantity: 0,
           totalAmount: 0,
           transactionCount: 0,
-          fixedPrice: seller.rate, // rate from sellers table
-          dailyQuantity: seller.quantity, // quantity from sellers table
+          fixedPrice: seller.rate,
+          dailyQuantity: seller.quantity,
+          isAlsoBuyer: seller.isAlsoBuyer === true,
         });
       }
     });
@@ -252,6 +257,32 @@ export default function SellerScreen({ onNavigate, onLogout }) {
                         <Text style={styles.sellerPhone}>{seller.phone}</Text>
                       </View>
                       <View style={styles.sellerHeaderRight}>
+                        {seller._id && !seller.isAlsoBuyer && (
+                          <TouchableOpacity
+                            style={styles.addAsBuyerButton}
+                            onPress={async () => {
+                              setAddAsBuyerLoading(seller._id);
+                              try {
+                                await buyerService.addBuyerFromSeller(seller._id);
+                                await loadData();
+                                Alert.alert('Done', `${seller.name} is now also in Buyer list. Payment & milk can be managed from both Buyer and Seller screens.`);
+                              } catch (e) {
+                                Alert.alert('Error', e?.message || 'Failed to add as buyer.');
+                              } finally {
+                                setAddAsBuyerLoading(null);
+                              }
+                            }}
+                            disabled={!!addAsBuyerLoading}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.addAsBuyerButtonText}>
+                              {addAsBuyerLoading === seller._id ? '...' : 'Add as Buyer'}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                        {seller.isAlsoBuyer && (
+                          <Text style={styles.alsoBuyerBadge}>Buyer + Seller</Text>
+                        )}
                         <Text style={styles.sellerAmount}>{formatCurrency(seller.totalAmount)}</Text>
                         <Text style={styles.sellerQuantity}>{seller.totalQuantity.toFixed(2)} L</Text>
                         <Text style={styles.expandIcon}>{isExpanded ? '▲' : '▼'}</Text>
@@ -476,6 +507,24 @@ const styles = StyleSheet.create({
   },
   sellerHeaderRight: {
     alignItems: 'flex-end',
+  },
+  addAsBuyerButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginBottom: 6,
+  },
+  addAsBuyerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  alsoBuyerBadge: {
+    fontSize: 11,
+    color: '#2E7D32',
+    fontWeight: '600',
+    marginBottom: 6,
   },
   sellerAmount: {
     fontSize: 18,

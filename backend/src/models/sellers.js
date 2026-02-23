@@ -57,6 +57,10 @@ async function addSeller(sellerData) {
   return saved;
 }
 
+async function getSellerById(id) {
+  return await Seller.findById(id);
+}
+
 async function getAllSellers() {
   const sellers = await Seller.find({});
   return sellers;
@@ -74,6 +78,7 @@ async function updateSeller(userId, updates) {
 module.exports = {
   Seller,
   findSellerByUserId,
+  getSellerById,
   addSeller,
   getAllSellers,
   updateSeller,

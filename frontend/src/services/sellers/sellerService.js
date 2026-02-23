@@ -44,4 +44,14 @@ export const sellerService = {
       return [];
     }
   },
+
+  /**
+   * Add existing buyer as seller (same person, no duplicate user).
+   * @param {string} buyerId - Buyer _id
+   */
+  addSellerFromBuyer: async (buyerId) => {
+    const id = typeof buyerId === 'string' ? buyerId : (buyerId?.toString?.() || buyerId);
+    const response = await apiClient.post(`/sellers/from-buyer/${id}`);
+    return response;
+  },
 };

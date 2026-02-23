@@ -1,4 +1,5 @@
-const { getAllBuyers, getBuyerById, updateBuyerById } = require("../models/buyers");
+const { getAllBuyers, getBuyerById, updateBuyerById, findBuyerByUserId, addBuyer } = require("../models/buyers");
+const { findSellerByUserId, getSellerById } = require("../models/sellers");
 const { User } = require("../models/users");
 
 /**
@@ -16,7 +17,10 @@ const listBuyers = async (req, res) => {
     
     const buyersWithUserDetails = await Promise.all(
       buyers.map(async (buyer) => {
-        const user = await User.findById(buyer.userId);
+        const [user, sellerRecord] = await Promise.all([
+          User.findById(buyer.userId),
+          findSellerByUserId(buyer.userId),
+        ]);
         return {
           _id: buyer._id,
           userId: buyer.userId,
@@ -26,6 +30,7 @@ const listBuyers = async (req, res) => {
           quantity: buyer.quantity,
           rate: buyer.rate,
           active: buyer.active !== false,
+          isAlsoSeller: !!sellerRecord,
           createdAt: buyer.createdAt,
           updatedAt: buyer.updatedAt,
         };
@@ -77,8 +82,50 @@ const updateBuyer = async (req, res) => {
   }
 };
 
+/**
+ * Create buyer record from an existing seller (same person = buyer + seller).
+ * POST /buyers/from-seller/:sellerId
+ */
+const createBuyerFromSeller = async (req, res) => {
+  try {
+    const { sellerId } = req.params;
+    const seller = await getSellerById(sellerId);
+    if (!seller) return res.status(404).json({ error: "Seller not found" });
+    const existing = await findBuyerByUserId(seller.userId);
+    if (existing) {
+      return res.status(400).json({ error: "This person is already a buyer" });
+    }
+    const user = await User.findById(seller.userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+    const buyer = await addBuyer({
+      userId: seller.userId,
+      name: seller.name || user.name,
+      quantity: seller.quantity ?? 0,
+      rate: seller.rate ?? 0,
+      active: true,
+    });
+    const result = {
+      _id: buyer._id,
+      userId: buyer.userId,
+      name: buyer.name,
+      mobile: user?.mobile,
+      email: user?.email,
+      quantity: buyer.quantity,
+      rate: buyer.rate,
+      active: buyer.active !== false,
+      createdAt: buyer.createdAt,
+      updatedAt: buyer.updatedAt,
+    };
+    return res.status(201).json(result);
+  } catch (error) {
+    console.error("[buyers] createBuyerFromSeller:", error);
+    return res.status(500).json({ error: "Failed to add as buyer", message: error.message });
+  }
+};
+
 module.exports = {
   listBuyers,
   updateBuyer,
+  createBuyerFromSeller,
 };
 
