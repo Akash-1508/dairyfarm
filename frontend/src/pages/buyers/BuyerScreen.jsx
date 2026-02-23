@@ -26,7 +26,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
   const [buyersData, setBuyersData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedBuyer, setSelectedBuyer] = useState(null);
-  const [logTab, setLogTab] = useState('milk'); // 'milk' | 'cash' for expanded buyer logs
+  const [logTab, setLogTab] = useState('milk'); // 'milk' | 'payments' for expanded buyer logs
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [editingBuyer, setEditingBuyer] = useState(null);
@@ -226,7 +226,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
     const buyerList = Array.from(buyerMap.values());
     buyerList.forEach((buyer) => {
       const phone = (buyer.phone || '').trim();
-      const totalPaid = payments
+      const totalPaid = (payments || [])
         .filter((p) => String(p.customerMobile || '').trim() === phone)
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       buyer.pendingBalance = (buyer.totalAmount || 0) - totalPaid;
@@ -247,14 +247,11 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
-  const getBuyerCashTransactions = (phone) => {
+  /** Payments for this buyer from Payments schema (all payment types). */
+  const getBuyerPaymentTransactions = (phone) => {
     const p = String(phone || '').trim();
-    return payments
-      .filter(
-        (pay) =>
-          String(pay.customerMobile || '').trim() === p &&
-          String(pay.paymentType || 'cash').toLowerCase() === 'cash'
-      )
+    return (payments || [])
+      .filter((pay) => String(pay.customerMobile || '').trim() === p)
       .sort((a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
   };
 
@@ -451,7 +448,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
               </View>
             ) : filteredBuyers.map((buyer, index) => {
               const buyerTransactions = getBuyerTransactions(buyer.phone);
-              const buyerCashTransactions = getBuyerCashTransactions(buyer.phone);
+              const buyerPaymentTransactions = getBuyerPaymentTransactions(buyer.phone);
               const isExpanded = selectedBuyer === buyer.phone;
 
               return (
@@ -594,12 +591,12 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                           </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[styles.logTab, logTab === 'cash' && styles.logTabActive]}
-                          onPress={() => setLogTab('cash')}
+                          style={[styles.logTab, logTab === 'payments' && styles.logTabActive]}
+                          onPress={() => setLogTab('payments')}
                           activeOpacity={0.7}
                         >
-                          <Text style={[styles.logTabText, logTab === 'cash' && styles.logTabTextActive]}>
-                            Cash Transactions ({buyerCashTransactions.length})
+                          <Text style={[styles.logTabText, logTab === 'payments' && styles.logTabTextActive]}>
+                            Payment Transactions ({buyerPaymentTransactions.length})
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -638,7 +635,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                         </>
                       )}
 
-                      {logTab === 'cash' && (
+                      {logTab === 'payments' && (
                         <>
                           {canEditUsers && (
                             <TouchableOpacity
@@ -649,8 +646,8 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                               <Text style={styles.addMilkTxButtonText}>+ Add Payment</Text>
                             </TouchableOpacity>
                           )}
-                          {buyerCashTransactions.length > 0 ? (
-                            buyerCashTransactions.map((pay) => (
+                          {buyerPaymentTransactions.length > 0 ? (
+                            buyerPaymentTransactions.map((pay) => (
                               <View key={pay._id} style={styles.transactionItem}>
                                 <View style={styles.transactionRow}>
                                   <Text style={styles.transactionDate}>{formatDate(pay.paymentDate)}</Text>
@@ -658,14 +655,14 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                                 </View>
                                 <View style={styles.transactionRow}>
                                   <Text style={styles.transactionDetails}>
-                                    {pay.paymentDirection ? `Type: ${pay.paymentDirection}` : 'Cash payment'}
+                                    {[pay.paymentType, pay.paymentDirection].filter(Boolean).join(' · ') || 'Payment'}
                                   </Text>
                                 </View>
                                 {pay.notes ? <Text style={styles.transactionNotes}>{pay.notes}</Text> : null}
                               </View>
                             ))
                           ) : (
-                            <Text style={styles.noLogsText}>No cash transactions yet.</Text>
+                            <Text style={styles.noLogsText}>No payment transactions yet.</Text>
                           )}
                         </>
                       )}
