@@ -31,6 +31,9 @@ const listBuyers = async (req, res) => {
           rate: buyer.rate,
           active: buyer.active !== false,
           isAlsoSeller: !!sellerRecord,
+          deliveryDays: buyer.deliveryDays,
+          deliveryCycleDays: buyer.deliveryCycleDays,
+          deliveryCycleStartDate: buyer.deliveryCycleStartDate,
           createdAt: buyer.createdAt,
           updatedAt: buyer.updatedAt,
         };
@@ -52,10 +55,13 @@ const updateBuyer = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body || {};
-    const allowed = ["active", "quantity", "rate", "name"];
+    const allowed = ["active", "quantity", "rate", "name", "deliveryDays", "deliveryCycleDays", "deliveryCycleStartDate"];
     const filtered = {};
     for (const key of allowed) {
       if (updates[key] !== undefined) filtered[key] = updates[key];
+    }
+    if (filtered.deliveryCycleStartDate != null && typeof filtered.deliveryCycleStartDate === "string") {
+      filtered.deliveryCycleStartDate = new Date(filtered.deliveryCycleStartDate);
     }
     if (Object.keys(filtered).length === 0) {
       return res.status(400).json({ error: "No valid fields to update" });
@@ -73,6 +79,9 @@ const updateBuyer = async (req, res) => {
       quantity: updated.quantity,
       rate: updated.rate,
       active: updated.active !== false,
+      deliveryDays: updated.deliveryDays,
+      deliveryCycleDays: updated.deliveryCycleDays,
+      deliveryCycleStartDate: updated.deliveryCycleStartDate,
       createdAt: updated.createdAt,
       updatedAt: updated.updatedAt,
     });

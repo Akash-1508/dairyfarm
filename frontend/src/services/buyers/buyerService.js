@@ -31,6 +31,12 @@ export const buyerService = {
     return await apiClient.patch(`/buyers/${id}`, { active: !!active });
   },
 
+  /** Update buyer fields (e.g. deliveryDays, deliveryCycleDays, deliveryCycleStartDate, name, quantity, rate). */
+  updateBuyer: async (buyerId, payload) => {
+    const id = typeof buyerId === 'string' ? buyerId : (buyerId?.toString?.() || buyerId);
+    return await apiClient.patch(`/buyers/${id}`, payload);
+  },
+
   /**
    * Add existing seller as buyer (same person, no duplicate user).
    * @param {string} sellerId - Seller _id

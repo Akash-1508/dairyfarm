@@ -16,10 +16,11 @@ import { milkService } from '../../services/milk/milkService';
 import { buyerService } from '../../services/buyers/buyerService';
 import { formatCurrency } from '../../utils/currencyUtils';
 
-/** Today 00:00 to 24:00 in India (IST) so "today delivered" matches backend regardless of device/server timezone. */
+const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+
+/** Today 00:00 to 24:00 in India (IST). */
 function getTodayStartEndIST() {
   const now = new Date();
-  const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
   const istNow = new Date(now.getTime() + IST_OFFSET_MS);
   const y = istNow.getUTCFullYear();
   const m = istNow.getUTCMonth();
@@ -27,6 +28,25 @@ function getTodayStartEndIST() {
   const start = new Date(Date.UTC(y, m, d) - IST_OFFSET_MS);
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   return { start, end };
+}
+
+/** True if today (IST) is a delivery day for this buyer. */
+function isDeliveryDayToday(buyer, todayStartIST) {
+  const deliveryDays = buyer.deliveryDays;
+  if (deliveryDays && Array.isArray(deliveryDays) && deliveryDays.length > 0) {
+    const dayOfWeekIST = new Date(todayStartIST.getTime() + IST_OFFSET_MS).getUTCDay();
+    return deliveryDays.includes(dayOfWeekIST);
+  }
+  const cycleDays = Number(buyer.deliveryCycleDays);
+  if (cycleDays > 1 && buyer.deliveryCycleStartDate) {
+    const start = new Date(buyer.deliveryCycleStartDate);
+    const startIST = new Date(start.getTime() + IST_OFFSET_MS);
+    const startDayMs = Date.UTC(startIST.getUTCFullYear(), startIST.getUTCMonth(), startIST.getUTCDate()) - IST_OFFSET_MS;
+    const startDay = new Date(startDayMs);
+    const daysDiff = Math.round((todayStartIST.getTime() - startDay.getTime()) / (24 * 60 * 60 * 1000));
+    return daysDiff >= 0 && daysDiff % cycleDays === 0;
+  }
+  return true;
 }
 
 export default function QuickSaleScreen({ onNavigate, onLogout }) {
@@ -66,7 +86,7 @@ export default function QuickSaleScreen({ onNavigate, onLogout }) {
 
   const buyersWithStatus = useMemo(() => {
     return buyers
-      .filter((b) => b.mobile)
+      .filter((b) => b.mobile && isDeliveryDayToday(b, todayStart))
       .map((b) => {
         const mobile = String(b.mobile).trim();
         const today = todaySales.filter((t) => String(t.buyerPhone || '').trim() === mobile);
@@ -83,7 +103,7 @@ export default function QuickSaleScreen({ onNavigate, onLogout }) {
           todayAmount: todayAmt,
         };
       });
-  }, [buyers, todaySales]);
+  }, [buyers, todaySales, todayStart]);
 
   const todayRequirement = useMemo(
     () => buyersWithStatus.reduce((s, b) => s + b.dailyQuantity, 0),

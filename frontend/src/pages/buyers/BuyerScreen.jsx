@@ -37,6 +37,10 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
     email: '',
     milkFixedPrice: '',
     dailyMilkQuantity: '',
+    deliveryScheduleType: 'daily',
+    deliveryDays: [],
+    deliveryCycleDays: '2',
+    deliveryCycleStartDate: '',
   });
   const [showAddMilkModal, setShowAddMilkModal] = useState(false);
   const [addMilkBuyer, setAddMilkBuyer] = useState(null);
@@ -197,6 +201,9 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
           dailyQuantity: buyer.quantity,
           active: buyer.active !== false,
           isAlsoSeller: buyer.isAlsoSeller === true,
+          deliveryDays: buyer.deliveryDays,
+          deliveryCycleDays: buyer.deliveryCycleDays,
+          deliveryCycleStartDate: buyer.deliveryCycleStartDate,
         });
       }
     });
@@ -263,14 +270,28 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
     });
   };
 
+  const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
   const openEditForm = (buyer) => {
     setEditingBuyer(buyer);
+    const hasDays = buyer.deliveryDays && buyer.deliveryDays.length > 0;
+    const hasCycle = Number(buyer.deliveryCycleDays) > 1 && buyer.deliveryCycleStartDate;
+    let scheduleType = 'daily';
+    if (hasDays) scheduleType = 'specific_days';
+    else if (hasCycle) scheduleType = 'cycle';
+    const startDate = buyer.deliveryCycleStartDate
+      ? new Date(buyer.deliveryCycleStartDate).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
     setFormData({
       name: buyer.name || '',
       mobile: buyer.phone || '',
       email: buyer.email || '',
       milkFixedPrice: buyer.fixedPrice != null ? String(buyer.fixedPrice) : '',
       dailyMilkQuantity: buyer.dailyQuantity != null ? String(buyer.dailyQuantity) : '',
+      deliveryScheduleType: scheduleType,
+      deliveryDays: Array.isArray(buyer.deliveryDays) ? [...buyer.deliveryDays] : [],
+      deliveryCycleDays: buyer.deliveryCycleDays ? String(buyer.deliveryCycleDays) : '2',
+      deliveryCycleStartDate: startDate,
     });
     setShowEditForm(true);
   };
@@ -288,6 +309,14 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       Alert.alert('Error', 'Mobile must be exactly 10 digits');
       return;
     }
+    if (formData.deliveryScheduleType === 'specific_days' && (!formData.deliveryDays || formData.deliveryDays.length === 0)) {
+      Alert.alert('Error', 'Select at least one delivery day');
+      return;
+    }
+    if (formData.deliveryScheduleType === 'cycle' && !formData.deliveryCycleStartDate?.trim()) {
+      Alert.alert('Error', 'Enter start date for delivery cycle');
+      return;
+    }
     try {
       setLoading(true);
       const fixedPrice = formData.milkFixedPrice?.trim() ? parseFloat(formData.milkFixedPrice) : undefined;
@@ -299,6 +328,26 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
         milkFixedPrice: fixedPrice,
         dailyMilkQuantity: dailyQuantity,
       });
+      const deliveryPayload = {};
+      if (formData.deliveryScheduleType === 'daily') {
+        deliveryPayload.deliveryDays = [];
+        deliveryPayload.deliveryCycleDays = null;
+        deliveryPayload.deliveryCycleStartDate = null;
+      } else if (formData.deliveryScheduleType === 'specific_days') {
+        deliveryPayload.deliveryDays = formData.deliveryDays && formData.deliveryDays.length ? formData.deliveryDays : [];
+        deliveryPayload.deliveryCycleDays = null;
+        deliveryPayload.deliveryCycleStartDate = null;
+      } else {
+        const cycleDays = parseInt(formData.deliveryCycleDays, 10) || 2;
+        deliveryPayload.deliveryDays = null;
+        deliveryPayload.deliveryCycleDays = cycleDays;
+        deliveryPayload.deliveryCycleStartDate = formData.deliveryCycleStartDate
+          ? new Date(formData.deliveryCycleStartDate).toISOString()
+          : null;
+      }
+      if (editingBuyer._id) {
+        await buyerService.updateBuyer(editingBuyer._id, deliveryPayload);
+      }
       setShowEditForm(false);
       setEditingBuyer(null);
       await loadData(true);
@@ -326,6 +375,14 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
     // Email validation - if provided, must contain @
     if (formData.email && formData.email.trim() && !formData.email.trim().includes('@')) {
       Alert.alert('Error', 'Email must contain @ symbol');
+      return;
+    }
+    if (formData.deliveryScheduleType === 'specific_days' && (!formData.deliveryDays || formData.deliveryDays.length === 0)) {
+      Alert.alert('Error', 'Select at least one delivery day');
+      return;
+    }
+    if (formData.deliveryScheduleType === 'cycle' && !formData.deliveryCycleStartDate?.trim()) {
+      Alert.alert('Error', 'Enter start date for delivery cycle');
       return;
     }
 
@@ -368,12 +425,42 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
         2 // role: CONSUMER (Buyer)
       );
 
+      await loadData(true);
+
+      // Apply delivery schedule: find new buyer by mobile and update
+      const deliveryPayload = {};
+      if (formData.deliveryScheduleType === 'daily') {
+        deliveryPayload.deliveryDays = [];
+        deliveryPayload.deliveryCycleDays = null;
+        deliveryPayload.deliveryCycleStartDate = null;
+      } else if (formData.deliveryScheduleType === 'specific_days') {
+        deliveryPayload.deliveryDays = formData.deliveryDays && formData.deliveryDays.length ? formData.deliveryDays : [];
+        deliveryPayload.deliveryCycleDays = null;
+        deliveryPayload.deliveryCycleStartDate = null;
+      } else {
+        const cycleDays = parseInt(formData.deliveryCycleDays, 10) || 2;
+        deliveryPayload.deliveryDays = null;
+        deliveryPayload.deliveryCycleDays = cycleDays;
+        deliveryPayload.deliveryCycleStartDate = formData.deliveryCycleStartDate
+          ? new Date(formData.deliveryCycleStartDate).toISOString()
+          : null;
+      }
+      const mobileTrim = formData.mobile.trim();
+      const allBuyers = await buyerService.getBuyers(false);
+      const newBuyer = allBuyers.find((b) => (b.mobile || '').toString().trim() === mobileTrim);
+      if (newBuyer && newBuyer._id) {
+        await buyerService.updateBuyer(newBuyer._id, deliveryPayload);
+      }
+
       // Reset form
-      setFormData({ name: '', mobile: '', email: '', milkFixedPrice: '', dailyMilkQuantity: '' });
+      setFormData({
+        name: '', mobile: '', email: '', milkFixedPrice: '', dailyMilkQuantity: '',
+        deliveryScheduleType: 'daily', deliveryDays: [], deliveryCycleDays: '2',
+        deliveryCycleStartDate: new Date().toISOString().slice(0, 10),
+      });
       setShowAddForm(false);
       await loadData(true);
-      
-      // Show success message after data is loaded
+
       Alert.alert('Success', 'Buyer created successfully!');
     } catch (error) {
       console.error('Failed to create buyer:', error);
@@ -496,41 +583,43 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                             />
                           </View>
                         )}
-                        {canEditUsers && buyer.userId && (
-                          <TouchableOpacity
-                            style={styles.editButton}
-                            onPress={() => openEditForm(buyer)}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={styles.editButtonText}>Edit</Text>
-                          </TouchableOpacity>
-                        )}
-                        {canEditUsers && buyer._id && !buyer.isAlsoSeller && (
-                          <TouchableOpacity
-                            style={styles.addAsSellerButton}
-                            onPress={async () => {
-                              setAddAsSellerLoading(buyer._id);
-                              try {
-                                await sellerService.addSellerFromBuyer(buyer._id);
-                                await loadData(true);
-                                Alert.alert('Done', `${buyer.name} is now also in Seller list. Payment & milk can be managed from both Buyer and Seller screens.`);
-                              } catch (e) {
-                                Alert.alert('Error', e?.message || 'Failed to add as seller.');
-                              } finally {
-                                setAddAsSellerLoading(null);
-                              }
-                            }}
-                            disabled={!!addAsSellerLoading}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={styles.addAsSellerButtonText}>
-                              {addAsSellerLoading === buyer._id ? '...' : 'Add as Seller'}
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-                        {buyer.isAlsoSeller && (
-                          <Text style={styles.alsoSellerBadge}>Buyer + Seller</Text>
-                        )}
+                        <View style={styles.buyerActionsRow}>
+                          {canEditUsers && buyer.userId && (
+                            <TouchableOpacity
+                              style={styles.editButton}
+                              onPress={() => openEditForm(buyer)}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.editButtonText}>Edit</Text>
+                            </TouchableOpacity>
+                          )}
+                          {canEditUsers && buyer._id && !buyer.isAlsoSeller && (
+                            <TouchableOpacity
+                              style={styles.addAsSellerButton}
+                              onPress={async () => {
+                                setAddAsSellerLoading(buyer._id);
+                                try {
+                                  await sellerService.addSellerFromBuyer(buyer._id);
+                                  await loadData(true);
+                                  Alert.alert('Done', `${buyer.name} is now also in Seller list. Payment & milk can be managed from both Buyer and Seller screens.`);
+                                } catch (e) {
+                                  Alert.alert('Error', e?.message || 'Failed to add as seller.');
+                                } finally {
+                                  setAddAsSellerLoading(null);
+                                }
+                              }}
+                              disabled={!!addAsSellerLoading}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.addAsSellerButtonText}>
+                                {addAsSellerLoading === buyer._id ? '...' : 'Add as Seller'}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                          {buyer.isAlsoSeller && (
+                            <Text style={styles.alsoSellerBadge}>Buyer + Seller</Text>
+                          )}
+                        </View>
                         <Text style={styles.buyerAmount}>{formatCurrency(buyer.totalAmount)}</Text>
                         <Text style={styles.buyerQuantity}>{buyer.totalQuantity.toFixed(2)} L</Text>
                         <Text style={styles.expandIcon}>{isExpanded ? '▲' : '▼'}</Text>
@@ -734,6 +823,69 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                 keyboardType="decimal-pad"
                 style={styles.input}
               />
+
+              <Text style={styles.label}>Delivery schedule (Quick Sale)</Text>
+              <Text style={styles.hint}>Choose when this buyer gets milk. They will appear in Quick Sale only on these days.</Text>
+              <View style={styles.scheduleTypeRow}>
+                {['daily', 'specific_days', 'cycle'].map((type) => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[styles.scheduleTypeBtn, formData.deliveryScheduleType === type && styles.scheduleTypeBtnActive]}
+                    onPress={() => setFormData({ ...formData, deliveryScheduleType: type })}
+                  >
+                    <Text style={[styles.scheduleTypeBtnText, formData.deliveryScheduleType === type && styles.scheduleTypeBtnTextActive]}>
+                      {type === 'daily' ? 'Daily' : type === 'specific_days' ? 'Specific days' : 'Every N days'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {formData.deliveryScheduleType === 'specific_days' && (
+                <View style={styles.daysRow}>
+                  {DAY_LABELS.map((label, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={[styles.dayChip, formData.deliveryDays && formData.deliveryDays.includes(idx) && styles.dayChipActive]}
+                      onPress={() => {
+                        const current = formData.deliveryDays || [];
+                        const next = current.includes(idx) ? current.filter((d) => d !== idx) : [...current, idx].sort((a, b) => a - b);
+                        setFormData({ ...formData, deliveryDays: next });
+                      }}
+                    >
+                      <Text style={[styles.dayChipText, formData.deliveryDays && formData.deliveryDays.includes(idx) && styles.dayChipTextActive]}>{label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              {formData.deliveryScheduleType === 'cycle' && (
+                <View style={styles.cycleRow}>
+                  <View style={styles.cycleField}>
+                    <Text style={styles.sublabel}>Every</Text>
+                    <View style={styles.cycleSelectRow}>
+                      {[2, 3].map((n) => (
+                        <TouchableOpacity
+                          key={n}
+                          style={[styles.cycleOption, formData.deliveryCycleDays === String(n) && styles.cycleOptionActive]}
+                          onPress={() => setFormData({ ...formData, deliveryCycleDays: String(n) })}
+                        >
+                          <Text style={[styles.cycleOptionText, formData.deliveryCycleDays === String(n) && styles.cycleOptionTextActive]}>
+                            {n === 2 ? '2nd day' : '3rd day'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.cycleField}>
+                    <Text style={styles.sublabel}>Start date</Text>
+                    <Input
+                      placeholder="YYYY-MM-DD"
+                      value={formData.deliveryCycleStartDate}
+                      onChangeText={(text) => setFormData({ ...formData, deliveryCycleStartDate: text })}
+                      style={styles.input}
+                    />
+                  </View>
+                </View>
+              )}
+
               <Button
                 title={loading ? 'Updating...' : 'Update Buyer'}
                 onPress={handleUpdateBuyer}
@@ -759,7 +911,11 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
               <TouchableOpacity
                 onPress={() => {
                   setShowAddForm(false);
-                  setFormData({ name: '', mobile: '', email: '', milkFixedPrice: '', dailyMilkQuantity: '' });
+                  setFormData({
+                    name: '', mobile: '', email: '', milkFixedPrice: '', dailyMilkQuantity: '',
+                    deliveryScheduleType: 'daily', deliveryDays: [], deliveryCycleDays: '2',
+                    deliveryCycleStartDate: new Date().toISOString().slice(0, 10),
+                  });
                 }}
                 style={styles.closeButton}
               >
@@ -812,6 +968,68 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                 keyboardType="decimal-pad"
                 style={styles.input}
               />
+
+              <Text style={styles.label}>Delivery schedule (Quick Sale)</Text>
+              <Text style={styles.hint}>Choose when this buyer gets milk. They will appear in Quick Sale only on these days.</Text>
+              <View style={styles.scheduleTypeRow}>
+                {['daily', 'specific_days', 'cycle'].map((type) => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[styles.scheduleTypeBtn, formData.deliveryScheduleType === type && styles.scheduleTypeBtnActive]}
+                    onPress={() => setFormData({ ...formData, deliveryScheduleType: type })}
+                  >
+                    <Text style={[styles.scheduleTypeBtnText, formData.deliveryScheduleType === type && styles.scheduleTypeBtnTextActive]}>
+                      {type === 'daily' ? 'Daily' : type === 'specific_days' ? 'Specific days' : 'Every N days'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {formData.deliveryScheduleType === 'specific_days' && (
+                <View style={styles.daysRow}>
+                  {DAY_LABELS.map((label, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={[styles.dayChip, formData.deliveryDays && formData.deliveryDays.includes(idx) && styles.dayChipActive]}
+                      onPress={() => {
+                        const current = formData.deliveryDays || [];
+                        const next = current.includes(idx) ? current.filter((d) => d !== idx) : [...current, idx].sort((a, b) => a - b);
+                        setFormData({ ...formData, deliveryDays: next });
+                      }}
+                    >
+                      <Text style={[styles.dayChipText, formData.deliveryDays && formData.deliveryDays.includes(idx) && styles.dayChipTextActive]}>{label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              {formData.deliveryScheduleType === 'cycle' && (
+                <View style={styles.cycleRow}>
+                  <View style={styles.cycleField}>
+                    <Text style={styles.sublabel}>Every</Text>
+                    <View style={styles.cycleSelectRow}>
+                      {[2, 3].map((n) => (
+                        <TouchableOpacity
+                          key={n}
+                          style={[styles.cycleOption, formData.deliveryCycleDays === String(n) && styles.cycleOptionActive]}
+                          onPress={() => setFormData({ ...formData, deliveryCycleDays: String(n) })}
+                        >
+                          <Text style={[styles.cycleOptionText, formData.deliveryCycleDays === String(n) && styles.cycleOptionTextActive]}>
+                            {n === 2 ? '2nd day' : '3rd day'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.cycleField}>
+                    <Text style={styles.sublabel}>Start date</Text>
+                    <Input
+                      placeholder="YYYY-MM-DD"
+                      value={formData.deliveryCycleStartDate}
+                      onChangeText={(text) => setFormData({ ...formData, deliveryCycleStartDate: text })}
+                      style={styles.input}
+                    />
+                  </View>
+                </View>
+              )}
 
               <Text style={styles.infoText}>
                 Password will be set to: 123456#
@@ -1071,44 +1289,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginRight: 8,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   activeLabel: {
     fontSize: 12,
     color: '#555',
     marginRight: 6,
   },
+  buyerActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 6,
+    gap: 6,
+  },
   editButton: {
     backgroundColor: '#FF9800',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 6,
-    marginBottom: 6,
   },
   editButtonText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   addAsSellerButton: {
     backgroundColor: '#2196F3',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     borderRadius: 6,
-    marginBottom: 6,
-    marginLeft: 6,
   },
   addAsSellerButtonText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   alsoSellerBadge: {
     fontSize: 11,
     color: '#1976D2',
     fontWeight: '600',
-    marginBottom: 6,
-    marginLeft: 4,
   },
   buyerStats: {
     flexDirection: 'row',
@@ -1319,6 +1539,90 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 8,
     marginBottom: 15,
+  },
+  hint: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 10,
+  },
+  scheduleTypeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  scheduleTypeBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+  },
+  scheduleTypeBtnActive: {
+    backgroundColor: '#4CAF50',
+  },
+  scheduleTypeBtnText: {
+    fontSize: 13,
+    color: '#555',
+    fontWeight: '600',
+  },
+  scheduleTypeBtnTextActive: {
+    color: '#fff',
+  },
+  daysRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 12,
+  },
+  dayChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: '#f0f0f0',
+  },
+  dayChipActive: {
+    backgroundColor: '#2196F3',
+  },
+  dayChipText: {
+    fontSize: 12,
+    color: '#555',
+    fontWeight: '600',
+  },
+  dayChipTextActive: {
+    color: '#fff',
+  },
+  cycleRow: {
+    marginBottom: 12,
+  },
+  cycleField: {
+    marginBottom: 10,
+  },
+  sublabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  cycleSelectRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  cycleOption: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+  },
+  cycleOptionActive: {
+    backgroundColor: '#4CAF50',
+  },
+  cycleOptionText: {
+    fontSize: 13,
+    color: '#555',
+    fontWeight: '600',
+  },
+  cycleOptionTextActive: {
+    color: '#fff',
   },
   createButton: {
     marginTop: 10,

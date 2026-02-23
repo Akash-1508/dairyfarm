@@ -27,6 +27,25 @@ const BuyerSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
     required: false
+  },
+  // Delivery schedule: show in Quick Sale only on these days (0=Sun, 1=Mon, ..., 6=Sat). Empty = daily.
+  deliveryDays: {
+    type: [Number],
+    required: false,
+    default: undefined
+  },
+  // Alternate days: 1=daily, 2=every 2nd day, 3=every 3rd day. Used when deliveryDays not set.
+  deliveryCycleDays: {
+    type: Number,
+    required: false,
+    min: 1,
+    default: undefined
+  },
+  // Reference date (start of day) for cycle. Required when deliveryCycleDays > 1.
+  deliveryCycleStartDate: {
+    type: Date,
+    required: false,
+    default: undefined
   }
 }, {
   timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' },
