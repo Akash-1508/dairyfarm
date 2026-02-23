@@ -16,11 +16,16 @@ import { milkService } from '../../services/milk/milkService';
 import { buyerService } from '../../services/buyers/buyerService';
 import { formatCurrency } from '../../utils/currencyUtils';
 
-function getTodayStartEnd() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
+/** Today 00:00 to 24:00 in India (IST) so "today delivered" matches backend regardless of device/server timezone. */
+function getTodayStartEndIST() {
+  const now = new Date();
+  const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+  const y = istNow.getUTCFullYear();
+  const m = istNow.getUTCMonth();
+  const d = istNow.getUTCDate();
+  const start = new Date(Date.UTC(y, m, d) - IST_OFFSET_MS);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   return { start, end };
 }
 
@@ -51,7 +56,7 @@ export default function QuickSaleScreen({ onNavigate, onLogout }) {
     loadData();
   }, []);
 
-  const { start: todayStart, end: todayEnd } = useMemo(() => getTodayStartEnd(), []);
+  const { start: todayStart, end: todayEnd } = useMemo(() => getTodayStartEndIST(), []);
 
   const todaySales = useMemo(() => {
     return transactions.filter(
@@ -191,9 +196,9 @@ export default function QuickSaleScreen({ onNavigate, onLogout }) {
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.btn, styles.btnCustom]}
+                      style={[styles.btn, styles.btnCustom, b.deliveredToday && styles.btnDisabled]}
                       onPress={() => handleCustomDelivered(b)}
-                      disabled={actionLoading !== null}
+                      disabled={b.deliveredToday || actionLoading !== null}
                     >
                       <Text style={styles.btnText}>Custom Delivered</Text>
                     </TouchableOpacity>

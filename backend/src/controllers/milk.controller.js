@@ -15,6 +15,17 @@ const {
   findBuyerByUserId,
 } = require("../models");
 
+/** Start of today 00:00:00 in India (IST, UTC+5:30) so quick sale date matches Indian calendar day regardless of server timezone. */
+function getStartOfTodayIST() {
+  const now = new Date();
+  const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+  const y = istNow.getUTCFullYear();
+  const m = istNow.getUTCMonth();
+  const d = istNow.getUTCDate();
+  return new Date(Date.UTC(y, m, d) - IST_OFFSET_MS);
+}
+
 const milkTxSchema = z.object({
   date: z.string().datetime(),
   quantity: z.number().nonnegative(),
@@ -181,8 +192,7 @@ const createQuickSale = async (req, res) => {
     }
 
     const totalAmount = Math.round(quantity * pricePerLiter * 100) / 100;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getStartOfTodayIST();
 
     const payload = {
       date: today.toISOString(),
