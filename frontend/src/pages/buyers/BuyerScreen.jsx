@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  Switch,
 } from 'react-native';
 import HeaderWithMenu from '../../components/common/HeaderWithMenu';
 import Input from '../../components/common/Input';
@@ -36,8 +37,111 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
     milkFixedPrice: '',
     dailyMilkQuantity: '',
   });
+  const [showAddMilkModal, setShowAddMilkModal] = useState(false);
+  const [addMilkBuyer, setAddMilkBuyer] = useState(null);
+  const [addMilkLoading, setAddMilkLoading] = useState(false);
+  const [milkTxForm, setMilkTxForm] = useState({ quantity: '', date: '', pricePerLiter: '' });
+  const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
+  const [addPaymentBuyer, setAddPaymentBuyer] = useState(null);
+  const [addPaymentLoading, setAddPaymentLoading] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({ amount: '', date: '' });
+  const [buyerFilterTab, setBuyerFilterTab] = useState('active'); // 'active' | 'inactive'
 
   const canEditUsers = currentUser?.role === 0 || currentUser?.role === 1;
+
+  const getTodayDateStr = () => {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  };
+
+  const openAddMilkModal = (buyer) => {
+    setAddMilkBuyer(buyer);
+    setMilkTxForm({
+      quantity: buyer.dailyQuantity != null ? String(buyer.dailyQuantity) : '',
+      date: getTodayDateStr(),
+      pricePerLiter: buyer.fixedPrice != null ? String(buyer.fixedPrice) : '',
+    });
+    setShowAddMilkModal(true);
+  };
+
+  const handleAddMilkTransaction = async () => {
+    if (!addMilkBuyer?.phone) return;
+    const q = parseFloat(milkTxForm.quantity);
+    const rate = parseFloat(milkTxForm.pricePerLiter);
+    if (isNaN(q) || q <= 0) {
+      Alert.alert('Error', 'Enter valid quantity (number > 0)');
+      return;
+    }
+    if (isNaN(rate) || rate < 0) {
+      Alert.alert('Error', 'Enter valid rate per liter');
+      return;
+    }
+    const dateObj = new Date(milkTxForm.date);
+    if (isNaN(dateObj.getTime())) {
+      Alert.alert('Error', 'Enter valid date (e.g. YYYY-MM-DD)');
+      return;
+    }
+    const totalAmount = Math.round(q * rate * 100) / 100;
+    try {
+      setAddMilkLoading(true);
+      await milkService.recordSale({
+        date: dateObj,
+        quantity: q,
+        pricePerLiter: rate,
+        totalAmount,
+        buyer: addMilkBuyer.name,
+        buyerPhone: addMilkBuyer.phone,
+      });
+      setShowAddMilkModal(false);
+      setAddMilkBuyer(null);
+      await loadData();
+      Alert.alert('Success', 'Milk transaction added.');
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to add transaction.');
+    } finally {
+      setAddMilkLoading(false);
+    }
+  };
+
+  const openAddPaymentModal = (buyer) => {
+    setAddPaymentBuyer(buyer);
+    setPaymentForm({ amount: '', date: getTodayDateStr() });
+    setShowAddPaymentModal(true);
+  };
+
+  const handleAddPaymentTransaction = async () => {
+    if (!addPaymentBuyer?.phone || !addPaymentBuyer?.userId) return;
+    const amount = parseFloat(paymentForm.amount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert('Error', 'Enter valid amount (number > 0)');
+      return;
+    }
+    const dateObj = new Date(paymentForm.date);
+    if (isNaN(dateObj.getTime())) {
+      Alert.alert('Error', 'Enter valid date (e.g. YYYY-MM-DD)');
+      return;
+    }
+    try {
+      setAddPaymentLoading(true);
+      await paymentService.createPayment({
+        customerId: addPaymentBuyer.userId,
+        customerName: addPaymentBuyer.name,
+        customerMobile: addPaymentBuyer.phone,
+        amount,
+        paymentDate: dateObj,
+        paymentType: 'cash',
+        paymentDirection: 'from_buyer',
+      });
+      setShowAddPaymentModal(false);
+      setAddPaymentBuyer(null);
+      await loadData();
+      Alert.alert('Success', 'Payment recorded.');
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to add payment.');
+    } finally {
+      setAddPaymentLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -79,6 +183,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       if (buyer.mobile) {
         const key = buyer.mobile.trim();
         buyerMap.set(key, {
+          _id: buyer._id,
           userId: buyer.userId,
           name: buyer.name,
           phone: buyer.mobile,
@@ -88,6 +193,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
           transactionCount: 0,
           fixedPrice: buyer.rate,
           dailyQuantity: buyer.quantity,
+          active: buyer.active !== false,
         });
       }
     });
@@ -131,6 +237,11 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       return a.name.localeCompare(b.name);
     });
   }, [transactions, buyersData, payments]);
+
+  const filteredBuyers = useMemo(
+    () => buyers.filter((b) => (buyerFilterTab === 'active' ? b.active : !b.active)),
+    [buyers, buyerFilterTab]
+  );
 
   const getBuyerTransactions = (phone) => {
     return transactions
@@ -308,14 +419,41 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
           </View>
         ) : (
           <>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle} numberOfLines={2}>
-                Total Buyers
-              </Text>
-              <Text style={styles.summaryValue}>{buyers.length}</Text>
+            <View style={styles.buyerListTabs}>
+              <TouchableOpacity
+                style={[styles.buyerListTab, buyerFilterTab === 'active' && styles.buyerListTabActive]}
+                onPress={() => { setBuyerFilterTab('active'); setSelectedBuyer(null); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.buyerListTabText, buyerFilterTab === 'active' && styles.buyerListTabTextActive]}>
+                  Active ({buyers.filter((b) => b.active).length})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.buyerListTab, buyerFilterTab === 'inactive' && styles.buyerListTabActive]}
+                onPress={() => { setBuyerFilterTab('inactive'); setSelectedBuyer(null); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.buyerListTabText, buyerFilterTab === 'inactive' && styles.buyerListTabTextActive]}>
+                  Inactive ({buyers.filter((b) => !b.active).length})
+                </Text>
+              </TouchableOpacity>
             </View>
 
-            {buyers.map((buyer, index) => {
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryTitle} numberOfLines={2}>
+                {buyerFilterTab === 'active' ? 'Active' : 'Inactive'} Buyers
+              </Text>
+              <Text style={styles.summaryValue}>{filteredBuyers.length}</Text>
+            </View>
+
+            {filteredBuyers.length === 0 ? (
+              <View style={styles.centerContainer}>
+                <Text style={styles.emptyText}>
+                  No {buyerFilterTab === 'active' ? 'active' : 'inactive'} buyers.
+                </Text>
+              </View>
+            ) : filteredBuyers.map((buyer, index) => {
               const buyerTransactions = getBuyerTransactions(buyer.phone);
               const buyerCashTransactions = getBuyerCashTransactions(buyer.phone);
               const isExpanded = selectedBuyer === buyer.phone;
@@ -339,6 +477,32 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                         <Text style={styles.buyerPhone}>{buyer.phone}</Text>
                       </View>
                       <View style={styles.buyerHeaderRight}>
+                        {canEditUsers && buyer._id != null && (
+                          <View style={styles.activeRow}>
+                            <Text style={styles.activeLabel}>{buyer.active ? 'Active' : 'Inactive'}</Text>
+                            <Switch
+                              value={buyer.active}
+                              onValueChange={async (value) => {
+                                const prevData = buyersData;
+                                setBuyersData((prev) =>
+                                  prev.map((b) =>
+                                    (b._id === buyer._id || b._id?.toString() === buyer._id?.toString())
+                                      ? { ...b, active: value }
+                                      : b
+                                  )
+                                );
+                                try {
+                                  await buyerService.updateBuyerActive(buyer._id, value);
+                                } catch (e) {
+                                  setBuyersData(prevData);
+                                  Alert.alert('Error', e?.message || 'Failed to update.');
+                                }
+                              }}
+                              trackColor={{ false: '#ccc', true: '#81c784' }}
+                              thumbColor="#fff"
+                            />
+                          </View>
+                        )}
                         {canEditUsers && buyer.userId && (
                           <TouchableOpacity
                             style={styles.editButton}
@@ -420,6 +584,15 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
 
                       {logTab === 'milk' && (
                         <>
+                          {canEditUsers && (
+                            <TouchableOpacity
+                              style={styles.addMilkTxButton}
+                              onPress={() => openAddMilkModal(buyer)}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.addMilkTxButtonText}>+ Add Milk Transaction</Text>
+                            </TouchableOpacity>
+                          )}
                           {buyerTransactions.length > 0 ? (
                             buyerTransactions.map((tx) => (
                               <View key={tx._id} style={styles.transactionItem}>
@@ -445,6 +618,15 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
 
                       {logTab === 'cash' && (
                         <>
+                          {canEditUsers && (
+                            <TouchableOpacity
+                              style={styles.addMilkTxButton}
+                              onPress={() => openAddPaymentModal(buyer)}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.addMilkTxButtonText}>+ Add Payment</Text>
+                            </TouchableOpacity>
+                          )}
                           {buyerCashTransactions.length > 0 ? (
                             buyerCashTransactions.map((pay) => (
                               <View key={pay._id} style={styles.transactionItem}>
@@ -626,6 +808,123 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
           </View>
         </View>
       </Modal>
+
+      {/* Add Milk Transaction Modal */}
+      <Modal
+        visible={showAddMilkModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => { setShowAddMilkModal(false); setAddMilkBuyer(null); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Milk Transaction</Text>
+              <TouchableOpacity
+                onPress={() => { setShowAddMilkModal(false); setAddMilkBuyer(null); }}
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {addMilkBuyer && (
+              <View style={styles.addMilkBuyerInfo}>
+                <Text style={styles.addMilkBuyerName}>{addMilkBuyer.name}</Text>
+                <Text style={styles.addMilkBuyerPhone}>{addMilkBuyer.phone}</Text>
+              </View>
+            )}
+            <ScrollView style={styles.formContainer}>
+              <Text style={styles.label}>Quantity (L) *</Text>
+              <Input
+                placeholder="e.g. 10"
+                value={milkTxForm.quantity}
+                onChangeText={(text) => setMilkTxForm((f) => ({ ...f, quantity: text }))}
+                keyboardType="decimal-pad"
+                style={styles.input}
+              />
+              <Text style={styles.label}>Date (YYYY-MM-DD) *</Text>
+              <Input
+                placeholder="e.g. 2025-02-18"
+                value={milkTxForm.date}
+                onChangeText={(text) => setMilkTxForm((f) => ({ ...f, date: text }))}
+                style={styles.input}
+              />
+              <Text style={styles.label}>Rate (₹/L) *</Text>
+              <Input
+                placeholder="e.g. 55"
+                value={milkTxForm.pricePerLiter}
+                onChangeText={(text) => setMilkTxForm((f) => ({ ...f, pricePerLiter: text }))}
+                keyboardType="decimal-pad"
+                style={styles.input}
+              />
+              {milkTxForm.quantity && milkTxForm.pricePerLiter && (
+                <Text style={styles.totalPreview}>
+                  Total: {formatCurrency(
+                    (parseFloat(milkTxForm.quantity) || 0) * (parseFloat(milkTxForm.pricePerLiter) || 0)
+                  )}
+                </Text>
+              )}
+              <Button
+                title={addMilkLoading ? 'Adding...' : 'Add Transaction'}
+                onPress={handleAddMilkTransaction}
+                disabled={addMilkLoading}
+                style={styles.createButton}
+              />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Payment Modal */}
+      <Modal
+        visible={showAddPaymentModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => { setShowAddPaymentModal(false); setAddPaymentBuyer(null); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Payment</Text>
+              <TouchableOpacity
+                onPress={() => { setShowAddPaymentModal(false); setAddPaymentBuyer(null); }}
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {addPaymentBuyer && (
+              <View style={styles.addMilkBuyerInfo}>
+                <Text style={styles.addMilkBuyerName}>{addPaymentBuyer.name}</Text>
+                <Text style={styles.addMilkBuyerPhone}>{addPaymentBuyer.phone}</Text>
+              </View>
+            )}
+            <ScrollView style={styles.formContainer}>
+              <Text style={styles.label}>Amount (₹) *</Text>
+              <Input
+                placeholder="e.g. 500"
+                value={paymentForm.amount}
+                onChangeText={(text) => setPaymentForm((f) => ({ ...f, amount: text }))}
+                keyboardType="decimal-pad"
+                style={styles.input}
+              />
+              <Text style={styles.label}>Date (YYYY-MM-DD) *</Text>
+              <Input
+                placeholder="e.g. 2025-02-18"
+                value={paymentForm.date}
+                onChangeText={(text) => setPaymentForm((f) => ({ ...f, date: text }))}
+                style={styles.input}
+              />
+              <Button
+                title={addPaymentLoading ? 'Adding...' : 'Add Payment'}
+                onPress={handleAddPaymentTransaction}
+                disabled={addPaymentLoading}
+                style={styles.createButton}
+              />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -656,6 +955,30 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     color: '#999',
+  },
+  buyerListTabs: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 10,
+    padding: 4,
+  },
+  buyerListTab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  buyerListTabActive: {
+    backgroundColor: '#4CAF50',
+  },
+  buyerListTabText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#555',
+  },
+  buyerListTabTextActive: {
+    color: '#FFFFFF',
   },
   summaryCard: {
     backgroundColor: '#2196F3',
@@ -724,6 +1047,17 @@ const styles = StyleSheet.create({
   expandIcon: {
     fontSize: 12,
     color: '#666',
+  },
+  activeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+    marginBottom: 6,
+  },
+  activeLabel: {
+    fontSize: 12,
+    color: '#555',
+    marginRight: 6,
   },
   editButton: {
     backgroundColor: '#FF9800',
@@ -809,6 +1143,42 @@ const styles = StyleSheet.create({
     color: '#777',
     marginTop: 4,
     marginBottom: 8,
+  },
+  addMilkTxButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+  },
+  addMilkTxButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  addMilkBuyerInfo: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  addMilkBuyerName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  addMilkBuyerPhone: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+  },
+  totalPreview: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginBottom: 12,
   },
   transactionItem: {
     backgroundColor: '#F9F9F9',

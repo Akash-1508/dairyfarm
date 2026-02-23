@@ -78,8 +78,8 @@ export default function MilkScreen({ onNavigate, onLogout, openAddSale, onConsum
   const loadBuyers = async () => {
     try {
       console.log('[MilkScreen] Starting to load buyers...');
-      // Load buyers from buyers table
-      const data = await buyerService.getBuyers();
+      // Load buyers from buyers table (active only for sale list)
+      const data = await buyerService.getBuyers(true);
       console.log('[MilkScreen] Received buyers data:', data);
       console.log('[MilkScreen] Buyers count:', data?.length || 0);
       

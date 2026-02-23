@@ -109,6 +109,32 @@ export const milkService = {
     await apiClient.delete(`/milk/${id}`);
   },
 
+  /**
+   * Quick sale: record today's delivery for a buyer.
+   * @param {string} buyerMobile - 10-digit buyer mobile
+   * @param {number} [quantity] - optional; if omitted uses buyer's set daily quantity
+   * @param {number} [pricePerLiter] - optional; if omitted uses buyer's set rate
+   */
+  quickSale: async (buyerMobile, quantity = null, pricePerLiter = null) => {
+    const payload = { buyerMobile: String(buyerMobile).trim() };
+    if (quantity != null && quantity > 0) payload.quantity = quantity;
+    if (pricePerLiter != null && pricePerLiter >= 0) payload.pricePerLiter = pricePerLiter;
+    const response = await apiClient.post('/milk/quick-sale', payload);
+    return {
+      ...response,
+      date: new Date(response.date),
+    };
+  },
+
+  /** Admin only: list milk requests from buyer app */
+  getMilkRequests: async () => {
+    const response = await apiClient.get('/milk/requests');
+    return (response || []).map((tx) => ({
+      ...tx,
+      date: new Date(tx.date),
+    }));
+  },
+
   getUnpaidTransactions: async (customerMobile, customerId = null) => {
     const params = new URLSearchParams();
     if (customerMobile) params.append('customerMobile', customerMobile);

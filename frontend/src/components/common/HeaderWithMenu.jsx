@@ -10,6 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { authService } from '../../services/auth/authService';
+import { notificationService } from '../../services/notifications/notificationService';
 
 const { width } = Dimensions.get('window');
 
@@ -17,6 +18,8 @@ const baseMenuItems = [
   { id: 1, title: 'Dashboard', icon: '📊' },
   { id: 2, title: 'Animals', icon: '🐄' },
   { id: 3, title: 'Milk', icon: '🥛' },
+  { id: 31, title: 'Quick Sale', icon: '⚡' },
+  { id: 32, title: 'Milk Requests', icon: '📋' },
   { id: 4, title: 'Chara', icon: '🌾' },
   { id: 5, title: 'Profit/Loss', icon: '💰' },
   { id: 6, title: 'Milk Sales Report', icon: '📈' },
@@ -24,6 +27,7 @@ const baseMenuItems = [
   { id: 8, title: 'Seller', icon: '🏪' },
   { id: 11, title: 'Payments', icon: '💵' },
   { id: 12, title: 'Pending Payments', icon: '📋' },
+  { id: 13, title: 'Notifications', icon: '🔔' },
 ];
 
 const buyerMenuItems = [
@@ -49,6 +53,20 @@ export default function HeaderWithMenu({ title, subtitle, onNavigate, isAuthenti
 
   const isBuyer = currentUser?.role === 2;
   const isAdmin = currentUser?.role === 0 || currentUser?.role === 1;
+
+  const [unreadCount, setUnreadCount] = useState(0);
+  useEffect(() => {
+    if (!isAuthenticated || !isAdmin) return;
+    const fetchCount = async () => {
+      try {
+        const count = await notificationService.getUnreadCount();
+        setUnreadCount(count);
+      } catch (_) {}
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 60000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, isAdmin]);
   const menuItems = isBuyer
     ? buyerMenuItems
     : [
@@ -101,6 +119,30 @@ export default function HeaderWithMenu({ title, subtitle, onNavigate, isAuthenti
           <Text style={styles.title}>{title}</Text>
           {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
         </View>
+        {isAdmin && (
+          <>
+            <TouchableOpacity
+              onPress={() => onNavigate('Notifications')}
+              style={styles.bellButton}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.bellIcon}>🔔</Text>
+              {unreadCount > 0 && (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => onNavigate('Quick Sale')}
+              style={styles.quickSaleShortcut}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.quickSaleShortcutIcon}>⚡</Text>
+              <Text style={styles.quickSaleShortcutText}>Quick Sale</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* Drawer Menu */}
@@ -193,6 +235,48 @@ const styles = StyleSheet.create({
   menuButton: {
     marginRight: 15,
     padding: 5,
+  },
+  bellButton: {
+    marginRight: 8,
+    padding: 8,
+    position: 'relative',
+  },
+  bellIcon: {
+    fontSize: 22,
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FF5252',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  bellBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  quickSaleShortcut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  quickSaleShortcutIcon: {
+    fontSize: 18,
+    marginRight: 6,
+  },
+  quickSaleShortcutText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   menuIcon: {
     width: 24,

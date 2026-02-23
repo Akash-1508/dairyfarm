@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBar, useColorScheme, ActivityIndicator, View, Text } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import DashboardScreen from './src/pages/dashboard/DashboardScreen';
 import AnimalScreen from './src/pages/animals/AnimalScreen';
 import MilkScreen from './src/pages/milk/MilkScreen';
@@ -9,6 +9,9 @@ import ProfitLossScreen from './src/pages/reports/ProfitLossScreen';
 import MilkSalesReportScreen from './src/pages/reports/MilkSalesReportScreen';
 import BuyerScreen from './src/pages/buyers/BuyerScreen';
 import SellerScreen from './src/pages/sellers/SellerScreen';
+import QuickSaleScreen from './src/pages/milk/QuickSaleScreen';
+import MilkRequestsScreen from './src/pages/milk/MilkRequestsScreen';
+import NotificationsScreen from './src/pages/notifications/NotificationsScreen';
 import AddAdminScreen from './src/pages/admin/AddAdminScreen';
 import AdminListScreen from './src/pages/admin/AdminListScreen';
 import PaymentScreen from './src/pages/payments/PaymentScreen';
@@ -82,7 +85,7 @@ function App() {
 
   const navigateToScreen = (screen, params) => {
     // Protected screens - only accessible after login
-    const protectedScreens = ['Dashboard', 'Animals', 'Milk', 'Chara', 'Profit/Loss', 'Milk Sales Report', 'Buyer', 'Seller', 'Payments', 'Pending Payments', 'Admin List', 'Add Admin', 'Buyer Dashboard', 'Milk Request', 'Transaction History', 'Payment History', 'Pending Payment', 'Pay'];
+    const protectedScreens = ['Dashboard', 'Animals', 'Milk', 'Quick Sale', 'Milk Requests', 'Notifications', 'Chara', 'Profit/Loss', 'Milk Sales Report', 'Buyer', 'Seller', 'Payments', 'Pending Payments', 'Admin List', 'Add Admin', 'Buyer Dashboard', 'Milk Request', 'Transaction History', 'Payment History', 'Pending Payment', 'Pay'];
     
     // If trying to access protected screen without login, redirect to login
     if (protectedScreens.includes(screen) && !isAuthenticated) {
@@ -157,6 +160,12 @@ function App() {
             onConsumedNavParam={() => setNavParams((p) => ({ ...p, Milk: undefined }))}
           />
         );
+      case 'Quick Sale':
+        return <QuickSaleScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
+      case 'Milk Requests':
+        return <MilkRequestsScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
+      case 'Notifications':
+        return <NotificationsScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Chara':
         return <CharaScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Profit/Loss':
@@ -213,8 +222,20 @@ function App() {
   return (
     <SafeAreaProvider>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      {renderScreen()}
+      <ScreenWithSafePadding>{renderScreen()}</ScreenWithSafePadding>
     </SafeAreaProvider>
+  );
+}
+
+/** Wraps screen content with bottom (and top) safe area padding so text/buttons are visible on real devices. */
+function ScreenWithSafePadding({ children }) {
+  const insets = useSafeAreaInsets();
+  const bottom = Math.max(insets.bottom, 20);
+  const top = Math.max(insets.top, 12);
+  return (
+    <View style={{ flex: 1, paddingTop: top, paddingBottom: bottom }}>
+      {children}
+    </View>
   );
 }
 

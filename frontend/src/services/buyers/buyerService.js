@@ -6,9 +6,11 @@
 import { apiClient } from '../api/apiClient';
 
 export const buyerService = {
-  getBuyers: async () => {
+  /** @param {boolean} [activeOnly] - if true, only active buyers (for Sale / Quick Sale) */
+  getBuyers: async (activeOnly = false) => {
     try {
-      const response = await apiClient.get('/buyers');
+      const url = activeOnly ? '/buyers?active=true' : '/buyers';
+      const response = await apiClient.get(url);
       if (!Array.isArray(response)) {
         console.warn('[buyerService] Response is not an array:', response);
         return [];
@@ -20,9 +22,13 @@ export const buyerService = {
       }));
     } catch (error) {
       console.error('[buyerService] Error fetching buyers:', error);
-      // Return empty array instead of throwing to allow graceful degradation
       return [];
     }
+  },
+
+  updateBuyerActive: async (buyerId, active) => {
+    const id = typeof buyerId === 'string' ? buyerId : (buyerId?.toString?.() || buyerId);
+    return await apiClient.patch(`/buyers/${id}`, { active: !!active });
   },
 };
 
