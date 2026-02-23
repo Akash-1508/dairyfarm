@@ -9,6 +9,7 @@ const { router: buyersRouter } = require("./buyers");
 const { router: sellersRouter } = require("./sellers");
 const { router: whatsappRouter } = require("./whatsapp");
 const { router: paymentsRouter } = require("./payments");
+const { router: notificationsRouter } = require("./notifications");
 
 const appRouter = Router();
 
@@ -22,6 +23,7 @@ appRouter.use("/buyers", buyersRouter);
 appRouter.use("/sellers", sellersRouter);
 appRouter.use("/whatsapp", whatsappRouter);
 appRouter.use("/payments", paymentsRouter);
+appRouter.use("/notifications", notificationsRouter);
 
 function registerRoutes(app) {
   app.use(appRouter);

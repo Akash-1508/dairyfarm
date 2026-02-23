@@ -1,17 +1,19 @@
-const { getAllBuyers } = require("../models/buyers");
+const { getAllBuyers, getBuyerById, updateBuyerById } = require("../models/buyers");
 const { User } = require("../models/users");
 
 /**
  * Get all buyers with user details
  * GET /buyers
+ * GET /buyers?active=true - only active buyers (for Sale / Quick Sale)
  */
-const listBuyers = async (_req, res) => {
+const listBuyers = async (req, res) => {
   try {
-    console.log("[buyers] Fetching all buyers...");
-    const buyers = await getAllBuyers();
-    console.log(`[buyers] Found ${buyers.length} buyers in database`);
+    const activeOnly = req.query.active === "true";
+    const filter = activeOnly ? { active: true } : {};
+    console.log("[buyers] Fetching buyers...", activeOnly ? "(active only)" : "");
+    const buyers = await getAllBuyers(filter);
+    console.log(`[buyers] Found ${buyers.length} buyers`);
     
-    // Populate user details for each buyer
     const buyersWithUserDetails = await Promise.all(
       buyers.map(async (buyer) => {
         const user = await User.findById(buyer.userId);
@@ -23,22 +25,60 @@ const listBuyers = async (_req, res) => {
           email: user?.email,
           quantity: buyer.quantity,
           rate: buyer.rate,
+          active: buyer.active !== false,
           createdAt: buyer.createdAt,
           updatedAt: buyer.updatedAt,
         };
       })
     );
     
-    console.log(`[buyers] Returning ${buyersWithUserDetails.length} buyers with user details`);
     return res.json(buyersWithUserDetails);
   } catch (error) {
     console.error("[buyers] Failed to fetch buyers:", error);
-    console.error("[buyers] Error stack:", error.stack);
     return res.status(500).json({ error: "Failed to fetch buyers", message: error.message });
+  }
+};
+
+/**
+ * Update buyer (e.g. active/inactive)
+ * PATCH /buyers/:id
+ */
+const updateBuyer = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body || {};
+    const allowed = ["active", "quantity", "rate", "name"];
+    const filtered = {};
+    for (const key of allowed) {
+      if (updates[key] !== undefined) filtered[key] = updates[key];
+    }
+    if (Object.keys(filtered).length === 0) {
+      return res.status(400).json({ error: "No valid fields to update" });
+    }
+    const buyer = await getBuyerById(id);
+    if (!buyer) return res.status(404).json({ error: "Buyer not found" });
+    const updated = await updateBuyerById(id, filtered);
+    const user = await User.findById(updated.userId);
+    return res.json({
+      _id: updated._id,
+      userId: updated.userId,
+      name: updated.name || user?.name,
+      mobile: user?.mobile,
+      email: user?.email,
+      quantity: updated.quantity,
+      rate: updated.rate,
+      active: updated.active !== false,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+    });
+  } catch (error) {
+    console.error("[buyers] Update buyer error:", error);
+    return res.status(500).json({ error: "Failed to update buyer", message: error.message });
   }
 };
 
 module.exports = {
   listBuyers,
+  updateBuyer,
 };
 

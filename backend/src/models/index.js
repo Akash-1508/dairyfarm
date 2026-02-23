@@ -8,4 +8,5 @@ module.exports = {
   ...require("./whatsappMessage"),
   ...require("./payments"),
   ...require("./paymentLogs"),
+  ...require("./notification"),
 };

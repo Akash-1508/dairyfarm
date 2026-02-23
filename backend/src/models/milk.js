@@ -98,6 +98,12 @@ const MilkTransactionSchema = new mongoose.Schema({
     default: 0,
     min: 0,
     required: false
+  },
+  requestSource: {
+    type: String,
+    enum: ['admin', 'buyer_app'],
+    default: 'admin',
+    required: false
   }
 }, {
   timestamps: true,
@@ -123,23 +129,27 @@ MilkTransactionSchema.index({ sellerPhone: 1 });
 MilkTransactionSchema.index({ date: -1 });
 MilkTransactionSchema.index({ milkSource: 1 });
 MilkTransactionSchema.index({ paymentStatus: 1 });
+MilkTransactionSchema.index({ requestSource: 1 });
 MilkTransactionSchema.index({ customerId: 1 }); // For linking with User
 
 const MilkTransaction = mongoose.model('MilkTransaction', MilkTransactionSchema);
 
-async function getAllMilkTransactions(mobileNumber) {
+async function getAllMilkTransactions(mobileNumber, requestSource = null) {
   let query = {};
   if (mobileNumber) {
-    query = {
-      $or: [
-        { buyerPhone: mobileNumber },
-        { sellerPhone: mobileNumber }
-      ]
-    };
+    query.$or = [
+      { buyerPhone: mobileNumber },
+      { sellerPhone: mobileNumber }
+    ];
   }
-  
+  if (requestSource) query.requestSource = requestSource;
+
   const transactions = await MilkTransaction.find(query).sort({ date: -1 });
   return transactions;
+}
+
+async function getMilkRequests() {
+  return await MilkTransaction.find({ type: 'sale', requestSource: 'buyer_app' }).sort({ date: -1, createdAt: -1 });
 }
 
 async function addMilkTransaction(transactionData) {
@@ -252,6 +262,7 @@ async function deleteMilkTransaction(transactionId) {
 module.exports = {
   MilkTransaction,
   getAllMilkTransactions,
+  getMilkRequests,
   addMilkTransaction,
   getMilkTransactionById,
   updateMilkTransaction,

@@ -22,6 +22,11 @@ const BuyerSchema = new mongoose.Schema({
     type: Number,
     required: false,
     min: 0
+  },
+  active: {
+    type: Boolean,
+    default: true,
+    required: false
   }
 }, {
   timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' },
@@ -57,9 +62,18 @@ async function addBuyer(buyerData) {
   return saved;
 }
 
-async function getAllBuyers() {
-  const buyers = await Buyer.find({});
+async function getAllBuyers(filter = {}) {
+  const query = { ...filter };
+  const buyers = await Buyer.find(query);
   return buyers;
+}
+
+async function getBuyerById(id) {
+  return await Buyer.findById(id);
+}
+
+async function updateBuyerById(id, updates) {
+  return await Buyer.findByIdAndUpdate(id, { $set: updates }, { new: true });
 }
 
 async function updateBuyer(userId, updates) {
@@ -76,5 +90,7 @@ module.exports = {
   findBuyerByUserId,
   addBuyer,
   getAllBuyers,
+  getBuyerById,
   updateBuyer,
+  updateBuyerById,
 };
