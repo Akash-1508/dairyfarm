@@ -14,7 +14,13 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { milkService } from '../../services/milk/milkService';
 import { buyerService } from '../../services/buyers/buyerService';
+import * as deliveryOverrideService from '../../services/deliveryOverride/deliveryOverrideService';
 import { formatCurrency } from '../../utils/currencyUtils';
+
+function getTodayDateStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
 
 const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
 
@@ -52,19 +58,24 @@ function isDeliveryDayToday(buyer, todayStartIST) {
 export default function QuickSaleScreen({ onNavigate, onLogout }) {
   const [buyers, setBuyers] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [overrides, setOverrides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
   const [customModal, setCustomModal] = useState(null);
 
+  const todayDateStr = useMemo(() => getTodayDateStr(), []);
+
   const loadData = async () => {
     try {
       setLoading(true);
-      const [buyersList, txList] = await Promise.all([
+      const [buyersList, txList, overridesList] = await Promise.all([
         buyerService.getBuyers(true),
         milkService.getTransactions(),
+        deliveryOverrideService.getOverridesForDate(todayDateStr).catch(() => []),
       ]);
       setBuyers(Array.isArray(buyersList) ? buyersList : []);
       setTransactions(Array.isArray(txList) ? txList : []);
+      setOverrides(Array.isArray(overridesList) ? overridesList : []);
     } catch (e) {
       Alert.alert('Error', 'Failed to load data.');
     } finally {
@@ -78,6 +89,15 @@ export default function QuickSaleScreen({ onNavigate, onLogout }) {
 
   const { start: todayStart, end: todayEnd } = useMemo(() => getTodayStartEndIST(), []);
 
+  const cancelledMobiles = useMemo(
+    () => new Set(overrides.filter((o) => o.type === 'cancelled').map((o) => String(o.customerMobile).trim())),
+    [overrides]
+  );
+  const addedMobiles = useMemo(
+    () => new Set(overrides.filter((o) => o.type === 'added').map((o) => String(o.customerMobile).trim())),
+    [overrides]
+  );
+
   const todaySales = useMemo(() => {
     return transactions.filter(
       (t) => t.type === 'sale' && new Date(t.date) >= todayStart && new Date(t.date) < todayEnd
@@ -85,8 +105,15 @@ export default function QuickSaleScreen({ onNavigate, onLogout }) {
   }, [transactions, todayStart, todayEnd]);
 
   const buyersWithStatus = useMemo(() => {
-    return buyers
-      .filter((b) => b.mobile && isDeliveryDayToday(b, todayStart))
+    const list = buyers
+      .filter((b) => {
+        if (!b.mobile) return false;
+        const mobile = String(b.mobile).trim();
+        const normallyOn = isDeliveryDayToday(b, todayStart);
+        if (cancelledMobiles.has(mobile)) return false;
+        if (addedMobiles.has(mobile)) return true;
+        return normallyOn;
+      })
       .map((b) => {
         const mobile = String(b.mobile).trim();
         const today = todaySales.filter((t) => String(t.buyerPhone || '').trim() === mobile);
@@ -103,7 +130,8 @@ export default function QuickSaleScreen({ onNavigate, onLogout }) {
           todayAmount: todayAmt,
         };
       });
-  }, [buyers, todaySales, todayStart]);
+    return list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en'));
+  }, [buyers, todaySales, todayStart, cancelledMobiles, addedMobiles]);
 
   const todayRequirement = useMemo(
     () => buyersWithStatus.reduce((s, b) => s + b.dailyQuantity, 0),

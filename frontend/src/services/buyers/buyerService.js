@@ -6,6 +6,12 @@
 import { apiClient } from '../api/apiClient';
 
 export const buyerService = {
+  /** Current user's buyer profile (for role 2). */
+  getMyProfile: async () => {
+    const response = await apiClient.get('/buyers/me');
+    return response;
+  },
+
   /** @param {boolean} [activeOnly] - if true, only active buyers (for Sale / Quick Sale) */
   getBuyers: async (activeOnly = false) => {
     try {

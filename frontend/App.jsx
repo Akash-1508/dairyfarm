@@ -10,6 +10,7 @@ import MilkSalesReportScreen from './src/pages/reports/MilkSalesReportScreen';
 import BuyerScreen from './src/pages/buyers/BuyerScreen';
 import SellerScreen from './src/pages/sellers/SellerScreen';
 import QuickSaleScreen from './src/pages/milk/QuickSaleScreen';
+import DeliveryScheduleScreen from './src/pages/milk/DeliveryScheduleScreen';
 import MilkRequestsScreen from './src/pages/milk/MilkRequestsScreen';
 import NotificationsScreen from './src/pages/notifications/NotificationsScreen';
 import AddAdminScreen from './src/pages/admin/AddAdminScreen';
@@ -21,6 +22,7 @@ import BuyerMilkRequestScreen from './src/pages/buyerApp/BuyerMilkRequestScreen'
 import BuyerTransactionHistoryScreen from './src/pages/buyerApp/BuyerTransactionHistoryScreen';
 import BuyerPaymentHistoryScreen from './src/pages/buyerApp/BuyerPaymentHistoryScreen';
 import BuyerPendingPaymentScreen from './src/pages/buyerApp/BuyerPendingPaymentScreen';
+import BuyerScheduleScreen from './src/pages/buyerApp/BuyerScheduleScreen';
 import LoginScreen from './src/pages/auth/LoginScreen';
 import SignupScreen from './src/pages/auth/SignupScreen';
 import ForgotPasswordScreen from './src/pages/auth/ForgotPasswordScreen';
@@ -85,7 +87,7 @@ function App() {
 
   const navigateToScreen = (screen, params) => {
     // Protected screens - only accessible after login
-    const protectedScreens = ['Dashboard', 'Animals', 'Milk', 'Quick Sale', 'Milk Requests', 'Notifications', 'Chara', 'Profit/Loss', 'Milk Sales Report', 'Buyer', 'Seller', 'Payments', 'Pending Payments', 'Admin List', 'Add Admin', 'Buyer Dashboard', 'Milk Request', 'Transaction History', 'Payment History', 'Pending Payment', 'Pay'];
+    const protectedScreens = ['Dashboard', 'Animals', 'Milk', 'Quick Sale', 'Delivery Schedule', 'Milk Requests', 'Notifications', 'Chara', 'Profit/Loss', 'Milk Sales Report', 'Buyer', 'Seller', 'Payments', 'Pending Payments', 'Admin List', 'Add Admin', 'Buyer Dashboard', 'Milk Request', 'My Schedule', 'Transaction History', 'Payment History', 'Pending Payment', 'Pay'];
     
     // If trying to access protected screen without login, redirect to login
     if (protectedScreens.includes(screen) && !isAuthenticated) {
@@ -162,6 +164,8 @@ function App() {
         );
       case 'Quick Sale':
         return <QuickSaleScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
+      case 'Delivery Schedule':
+        return <DeliveryScheduleScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Milk Requests':
         return <MilkRequestsScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Notifications':
@@ -188,6 +192,8 @@ function App() {
         return <BuyerDashboardScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Milk Request':
         return <BuyerMilkRequestScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
+      case 'My Schedule':
+        return <BuyerScheduleScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Transaction History':
         return <BuyerTransactionHistoryScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Payment History':

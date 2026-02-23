@@ -48,6 +48,36 @@ const listBuyers = async (req, res) => {
 };
 
 /**
+ * Get current user's buyer profile (for role 2 - buyer app).
+ * GET /buyers/me
+ */
+const getMyBuyerProfile = async (req, res) => {
+  try {
+    const userId = req.user?.userId || req.user?._id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const buyer = await findBuyerByUserId(userId);
+    if (!buyer) return res.status(404).json({ error: "Buyer profile not found" });
+    const user = await User.findById(buyer.userId);
+    return res.json({
+      _id: buyer._id,
+      userId: buyer.userId,
+      name: buyer.name || user?.name,
+      mobile: user?.mobile,
+      email: user?.email,
+      quantity: buyer.quantity,
+      rate: buyer.rate,
+      active: buyer.active !== false,
+      deliveryDays: buyer.deliveryDays,
+      deliveryCycleDays: buyer.deliveryCycleDays,
+      deliveryCycleStartDate: buyer.deliveryCycleStartDate,
+    });
+  } catch (error) {
+    console.error("[buyers] getMyBuyerProfile:", error);
+    return res.status(500).json({ error: "Failed to fetch profile", message: error.message });
+  }
+};
+
+/**
  * Update buyer (e.g. active/inactive)
  * PATCH /buyers/:id
  */
@@ -134,6 +164,7 @@ const createBuyerFromSeller = async (req, res) => {
 
 module.exports = {
   listBuyers,
+  getMyBuyerProfile,
   updateBuyer,
   createBuyerFromSeller,
 };

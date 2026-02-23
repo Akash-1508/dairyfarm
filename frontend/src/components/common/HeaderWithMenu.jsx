@@ -19,6 +19,7 @@ const baseMenuItems = [
   { id: 2, title: 'Animals', icon: '🐄' },
   { id: 3, title: 'Milk', icon: '🥛' },
   { id: 31, title: 'Quick Sale', icon: '⚡' },
+  { id: 33, title: 'Delivery Schedule', icon: '📅' },
   { id: 32, title: 'Milk Requests', icon: '📋' },
   { id: 4, title: 'Chara', icon: '🌾' },
   { id: 5, title: 'Profit/Loss', icon: '💰' },
@@ -33,6 +34,7 @@ const baseMenuItems = [
 const buyerMenuItems = [
   { id: 21, title: 'Buyer Dashboard', icon: '📊' },
   { id: 22, title: 'Milk Request', icon: '🥛' },
+  { id: 27, title: 'My Schedule', icon: '📅' },
   { id: 23, title: 'Transaction History', icon: '📜' },
   { id: 24, title: 'Payment History', icon: '💵' },
   { id: 25, title: 'Pending Payment', icon: '📋' },

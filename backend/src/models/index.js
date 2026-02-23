@@ -9,4 +9,5 @@ module.exports = {
   ...require("./payments"),
   ...require("./paymentLogs"),
   ...require("./notification"),
+  ...require("./deliveryOverride"),
 };
