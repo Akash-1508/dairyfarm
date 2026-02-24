@@ -31,6 +31,7 @@ const listBuyers = async (req, res) => {
           rate: buyer.rate,
           active: buyer.active !== false,
           isAlsoSeller: !!sellerRecord,
+          milkSource: buyer.milkSource || 'cow',
           deliveryDays: buyer.deliveryDays,
           deliveryCycleDays: buyer.deliveryCycleDays,
           deliveryCycleStartDate: buyer.deliveryCycleStartDate,
@@ -67,6 +68,7 @@ const getMyBuyerProfile = async (req, res) => {
       quantity: buyer.quantity,
       rate: buyer.rate,
       active: buyer.active !== false,
+      milkSource: buyer.milkSource || 'cow',
       deliveryDays: buyer.deliveryDays,
       deliveryCycleDays: buyer.deliveryCycleDays,
       deliveryCycleStartDate: buyer.deliveryCycleStartDate,
@@ -85,7 +87,7 @@ const updateBuyer = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body || {};
-    const allowed = ["active", "quantity", "rate", "name", "deliveryDays", "deliveryCycleDays", "deliveryCycleStartDate"];
+    const allowed = ["active", "quantity", "rate", "name", "milkSource", "deliveryDays", "deliveryCycleDays", "deliveryCycleStartDate"];
     const filtered = {};
     for (const key of allowed) {
       if (updates[key] !== undefined) filtered[key] = updates[key];
@@ -109,6 +111,7 @@ const updateBuyer = async (req, res) => {
       quantity: updated.quantity,
       rate: updated.rate,
       active: updated.active !== false,
+      milkSource: updated.milkSource || 'cow',
       deliveryDays: updated.deliveryDays,
       deliveryCycleDays: updated.deliveryCycleDays,
       deliveryCycleStartDate: updated.deliveryCycleStartDate,
@@ -142,6 +145,7 @@ const createBuyerFromSeller = async (req, res) => {
       quantity: seller.quantity ?? 0,
       rate: seller.rate ?? 0,
       active: true,
+      milkSource: 'cow',
     });
     const result = {
       _id: buyer._id,
@@ -152,6 +156,7 @@ const createBuyerFromSeller = async (req, res) => {
       quantity: buyer.quantity,
       rate: buyer.rate,
       active: buyer.active !== false,
+      milkSource: buyer.milkSource || 'cow',
       createdAt: buyer.createdAt,
       updatedAt: buyer.updatedAt,
     };

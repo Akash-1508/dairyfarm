@@ -35,7 +35,8 @@ export const authService = {
     address,
     milkFixedPrice,
     dailyMilkQuantity,
-    role
+    role,
+    milkSource
   ) => {
     const emailValue = (email != null && String(email).trim()) ? String(email).trim() : '';
     const res = await apiClient.post('/auth/signup', {
@@ -48,6 +49,7 @@ export const authService = {
       milkFixedPrice,
       dailyMilkQuantity,
       role,
+      milkSource: (milkSource && ['cow', 'buffalo', 'sheep', 'goat'].includes(milkSource)) ? milkSource : 'cow',
     });
     return res;
   },

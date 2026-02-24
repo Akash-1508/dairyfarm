@@ -61,6 +61,10 @@ const signupSchema = z.object({
     .number()
     .nonnegative()
     .optional(),
+  milkSource: z
+    .enum(['cow', 'buffalo', 'sheep', 'goat'])
+    .optional()
+    .default('cow'),
 });
 
 // Login validation schema - accepts email OR mobile

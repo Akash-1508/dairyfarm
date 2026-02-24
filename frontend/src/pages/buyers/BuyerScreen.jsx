@@ -19,6 +19,7 @@ import { paymentService } from '../../services/payments/paymentService';
 import { userService } from '../../services/users/userService';
 import { formatCurrency } from '../../utils/currencyUtils';
 import { authService } from '../../services/auth/authService';
+import { MILK_SOURCE_TYPES } from '../../constants';
 
 export default function BuyerScreen({ onNavigate, onLogout }) {
   const [transactions, setTransactions] = useState([]);
@@ -37,6 +38,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
     email: '',
     milkFixedPrice: '',
     dailyMilkQuantity: '',
+    milkSource: 'cow',
     deliveryScheduleType: 'daily',
     deliveryDays: [],
     deliveryCycleDays: '2',
@@ -199,6 +201,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
           transactionCount: 0,
           fixedPrice: buyer.rate,
           dailyQuantity: buyer.quantity,
+          milkSource: buyer.milkSource || 'cow',
           active: buyer.active !== false,
           isAlsoSeller: buyer.isAlsoSeller === true,
           deliveryDays: buyer.deliveryDays,
@@ -288,6 +291,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       email: buyer.email || '',
       milkFixedPrice: buyer.fixedPrice != null ? String(buyer.fixedPrice) : '',
       dailyMilkQuantity: buyer.dailyQuantity != null ? String(buyer.dailyQuantity) : '',
+      milkSource: (buyer.milkSource && ['cow', 'buffalo', 'sheep', 'goat'].includes(buyer.milkSource)) ? buyer.milkSource : 'cow',
       deliveryScheduleType: scheduleType,
       deliveryDays: Array.isArray(buyer.deliveryDays) ? [...buyer.deliveryDays] : [],
       deliveryCycleDays: buyer.deliveryCycleDays ? String(buyer.deliveryCycleDays) : '2',
@@ -329,6 +333,9 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
         dailyMilkQuantity: dailyQuantity,
       });
       const deliveryPayload = {};
+      if (formData.milkSource && ['cow', 'buffalo', 'sheep', 'goat'].includes(formData.milkSource)) {
+        deliveryPayload.milkSource = formData.milkSource;
+      }
       if (formData.deliveryScheduleType === 'daily') {
         deliveryPayload.deliveryDays = [];
         deliveryPayload.deliveryCycleDays = null;
@@ -413,6 +420,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       }
       
       // Create buyer with fixed password 123456#
+      const milkSource = (formData.milkSource && ['cow', 'buffalo', 'sheep', 'goat'].includes(formData.milkSource)) ? formData.milkSource : 'cow';
       await authService.signup(
         formData.name.trim(),
         formData.email.trim() || '',
@@ -422,7 +430,8 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
         undefined, // address
         fixedPrice,
         dailyQuantity,
-        2 // role: CONSUMER (Buyer)
+        2, // role: CONSUMER (Buyer)
+        milkSource
       );
 
       await loadData(true);
@@ -449,12 +458,14 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       const allBuyers = await buyerService.getBuyers(false);
       const newBuyer = allBuyers.find((b) => (b.mobile || '').toString().trim() === mobileTrim);
       if (newBuyer && newBuyer._id) {
-        await buyerService.updateBuyer(newBuyer._id, deliveryPayload);
+        const updatePayload = { ...deliveryPayload };
+        if (milkSource) updatePayload.milkSource = milkSource;
+        await buyerService.updateBuyer(newBuyer._id, updatePayload);
       }
 
       // Reset form
       setFormData({
-        name: '', mobile: '', email: '', milkFixedPrice: '', dailyMilkQuantity: '',
+        name: '', mobile: '', email: '', milkFixedPrice: '', dailyMilkQuantity: '', milkSource: 'cow',
         deliveryScheduleType: 'daily', deliveryDays: [], deliveryCycleDays: '2',
         deliveryCycleStartDate: new Date().toISOString().slice(0, 10),
       });
@@ -824,6 +835,25 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                 style={styles.input}
               />
 
+              <Text style={styles.label}>Milk source *</Text>
+              <View style={styles.milkSourceRow}>
+                {MILK_SOURCE_TYPES.map((src) => {
+                  const isActive = formData.milkSource === src.value;
+                  return (
+                    <TouchableOpacity
+                      key={src.value}
+                      style={[styles.milkSourceButton, isActive && styles.milkSourceButtonActive]}
+                      onPress={() => setFormData({ ...formData, milkSource: src.value })}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.milkSourceButtonText, isActive && styles.milkSourceButtonTextActive]}>
+                        {src.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
               <Text style={styles.label}>Delivery schedule (Quick Sale)</Text>
               <Text style={styles.hint}>Choose when this buyer gets milk. They will appear in Quick Sale only on these days.</Text>
               <View style={styles.scheduleTypeRow}>
@@ -912,7 +942,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                 onPress={() => {
                   setShowAddForm(false);
                   setFormData({
-                    name: '', mobile: '', email: '', milkFixedPrice: '', dailyMilkQuantity: '',
+                    name: '', mobile: '', email: '', milkFixedPrice: '', dailyMilkQuantity: '', milkSource: 'cow',
                     deliveryScheduleType: 'daily', deliveryDays: [], deliveryCycleDays: '2',
                     deliveryCycleStartDate: new Date().toISOString().slice(0, 10),
                   });
@@ -968,6 +998,25 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                 keyboardType="decimal-pad"
                 style={styles.input}
               />
+
+              <Text style={styles.label}>Milk source *</Text>
+              <View style={styles.milkSourceRow}>
+                {MILK_SOURCE_TYPES.map((src) => {
+                  const isActive = formData.milkSource === src.value;
+                  return (
+                    <TouchableOpacity
+                      key={src.value}
+                      style={[styles.milkSourceButton, isActive && styles.milkSourceButtonActive]}
+                      onPress={() => setFormData({ ...formData, milkSource: src.value })}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.milkSourceButtonText, isActive && styles.milkSourceButtonTextActive]}>
+                        {src.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
               <Text style={styles.label}>Delivery schedule (Quick Sale)</Text>
               <Text style={styles.hint}>Choose when this buyer gets milk. They will appear in Quick Sale only on these days.</Text>
@@ -1567,6 +1616,32 @@ const styles = StyleSheet.create({
   },
   scheduleTypeBtnTextActive: {
     color: '#fff',
+  },
+  milkSourceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  milkSourceButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: '#F0F0F0',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  milkSourceButtonActive: {
+    backgroundColor: '#2196F3',
+    borderColor: '#2196F3',
+  },
+  milkSourceButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  milkSourceButtonTextActive: {
+    color: '#FFFFFF',
   },
   daysRow: {
     flexDirection: 'row',

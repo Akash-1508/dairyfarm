@@ -55,6 +55,7 @@ const MilkTransactionSchema = new mongoose.Schema({
     type: String,
     enum: ['cow', 'buffalo', 'sheep', 'goat'],
     required: false,
+    default: 'cow',
     trim: true,
     lowercase: true
   },

@@ -127,10 +127,13 @@ const signup = async (req, res) => {
         });
         
         const buyer = await addBuyer({
-          userId: userId, // Pass as string, addBuyer will convert to ObjectId
+          userId: userId,
           name: created.name,
           quantity: validatedData.dailyMilkQuantity,
           rate: validatedData.milkFixedPrice,
+          milkSource: (validatedData.milkSource && ['cow', 'buffalo', 'sheep', 'goat'].includes(validatedData.milkSource))
+            ? validatedData.milkSource
+            : 'cow',
         });
         
         console.log(`[auth] Buyer record created successfully:`, {

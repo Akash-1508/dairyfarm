@@ -15,7 +15,7 @@ const {
   findBuyerByUserId,
 } = require("../models");
 
-/** Start of today 00:00:00 in India (IST, UTC+5:30) so quick sale date matches Indian calendar day regardless of server timezone. */
+/** Start of today in India (IST). Returns midnight UTC on the IST calendar day so toISOString().slice(0,10) shows correct date (e.g. 24 Feb 07:30 IST → 2026-02-24). */
 function getStartOfTodayIST() {
   const now = new Date();
   const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
@@ -23,7 +23,7 @@ function getStartOfTodayIST() {
   const y = istNow.getUTCFullYear();
   const m = istNow.getUTCMonth();
   const d = istNow.getUTCDate();
-  return new Date(Date.UTC(y, m, d) - IST_OFFSET_MS);
+  return new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
 }
 
 const milkTxSchema = z.object({
@@ -194,6 +194,9 @@ const createQuickSale = async (req, res) => {
     const totalAmount = Math.round(quantity * pricePerLiter * 100) / 100;
     const today = getStartOfTodayIST();
 
+    const milkSource = (buyer.milkSource && ['cow', 'buffalo', 'sheep', 'goat'].includes(String(buyer.milkSource).toLowerCase()))
+      ? String(buyer.milkSource).toLowerCase()
+      : 'cow';
     const payload = {
       date: today.toISOString(),
       quantity,
@@ -203,6 +206,7 @@ const createQuickSale = async (req, res) => {
       buyerPhone: buyerMobile,
       paymentType: "credit",
       notes: "Quick sale",
+      milkSource,
     };
 
     const tx = await addMilkTransaction({ type: "sale", ...payload });

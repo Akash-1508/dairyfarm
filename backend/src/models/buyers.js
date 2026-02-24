@@ -28,6 +28,14 @@ const BuyerSchema = new mongoose.Schema({
     default: true,
     required: false
   },
+  milkSource: {
+    type: String,
+    enum: ['cow', 'buffalo', 'sheep', 'goat'],
+    default: 'cow',
+    required: false,
+    trim: true,
+    lowercase: true
+  },
   // Delivery schedule: show in Quick Sale only on these days (0=Sun, 1=Mon, ..., 6=Sat). Empty = daily.
   deliveryDays: {
     type: [Number],

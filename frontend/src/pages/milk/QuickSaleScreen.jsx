@@ -16,6 +16,7 @@ import { milkService } from '../../services/milk/milkService';
 import { buyerService } from '../../services/buyers/buyerService';
 import * as deliveryOverrideService from '../../services/deliveryOverride/deliveryOverrideService';
 import { formatCurrency } from '../../utils/currencyUtils';
+import { MILK_SOURCE_TYPES } from '../../constants';
 
 function getTodayDateStr() {
   const d = new Date();
@@ -24,15 +25,15 @@ function getTodayDateStr() {
 
 const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
 
-/** Today 00:00 to 24:00 in India (IST). */
+/** Today 00:00 to 24:00 in India (IST). Use midnight UTC on IST date so saved dates align. */
 function getTodayStartEndIST() {
   const now = new Date();
   const istNow = new Date(now.getTime() + IST_OFFSET_MS);
   const y = istNow.getUTCFullYear();
   const m = istNow.getUTCMonth();
   const d = istNow.getUTCDate();
-  const start = new Date(Date.UTC(y, m, d) - IST_OFFSET_MS);
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  const start = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(y, m, d + 1, 0, 0, 0, 0));
   return { start, end };
 }
 
@@ -120,6 +121,8 @@ export default function QuickSaleScreen({ onNavigate, onLogout }) {
         const deliveredToday = today.length > 0;
         const todayQty = today.reduce((s, t) => s + (Number(t.quantity) || 0), 0);
         const todayAmt = today.reduce((s, t) => s + (Number(t.totalAmount) || 0), 0);
+        const todayMilkSource = today[0]?.milkSource || b.milkSource || 'cow';
+        const milkSourceLabel = MILK_SOURCE_TYPES.find((s) => s.value === todayMilkSource)?.label || todayMilkSource || 'Cow';
         return {
           ...b,
           mobile,
@@ -128,6 +131,7 @@ export default function QuickSaleScreen({ onNavigate, onLogout }) {
           deliveredToday,
           todayQuantity: todayQty,
           todayAmount: todayAmt,
+          todayMilkSourceLabel: milkSourceLabel,
         };
       });
     return list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en'));
@@ -224,7 +228,7 @@ export default function QuickSaleScreen({ onNavigate, onLogout }) {
                     {b.deliveredToday ? (
                       <View style={styles.badge}>
                         <Text style={styles.badgeText}>Delivered</Text>
-                        <Text style={styles.badgeSub}>{b.todayQuantity.toFixed(2)} L · {formatCurrency(b.todayAmount)}</Text>
+                        <Text style={styles.badgeSub}>{b.todayMilkSourceLabel} · {b.todayQuantity.toFixed(2)} L · {formatCurrency(b.todayAmount)}</Text>
                       </View>
                     ) : (
                       <Text style={styles.notDelivered}>Not delivered</Text>
