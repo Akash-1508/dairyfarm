@@ -3,8 +3,6 @@ const PDFDocument = require("pdfkit-table");
 const { createPayment, getAllPayments, getPaymentById, updatePayment, deletePayment, getSettlementPayments } = require("../models/payments");
 const { User } = require("../models/users");
 const { getUnpaidMilkTransactions, getUnpaidMilkTransactionsForSeller, updateMilkTransactionPayment, MilkTransaction } = require("../models/milk");
-const { createPaymentLog, getPaymentLogs: fetchPaymentLogs } = require("../models/paymentLogs");
-
 const paymentSchema = z.object({
   customerId: z.string().min(1, "Customer ID is required"),
   customerName: z.string().min(1, "Customer name is required"),
@@ -120,43 +118,6 @@ const createPaymentRecord = async (req, res) => {
     }
     
     const user = req.user;
-    const desc = direction === "to_seller"
-      ? `Payment of ₹${data.amount} paid to seller${linkedTransactions.length > 0 ? `, linked with ${linkedTransactions.length} purchase(s)` : ''}`
-      : `Payment of ₹${data.amount} received${linkedTransactions.length > 0 ? `, linked with ${linkedTransactions.length} milk transaction(s)` : ''}`;
-    await createPaymentLog({
-      action: "payment_created",
-      paymentId: payment._id,
-      customerId: data.customerId,
-      customerName: customer.name,
-      customerMobile: customer.mobile,
-      amount: data.amount,
-      milkQuantity: totalMilkQuantity,
-      description: desc,
-      performedBy: user?.userId || user?.id,
-      performedByName: user?.name || "System",
-      metadata: {
-        linkedTransactions,
-        remainingAmount,
-      }
-    });
-    
-    // Create logs for each linked milk transaction
-    for (const linkedTx of linkedTransactions) {
-      await createPaymentLog({
-        action: "milk_paid",
-        paymentId: payment._id,
-        milkTransactionId: linkedTx.transactionId,
-        customerId: data.customerId,
-        customerName: customer.name,
-        customerMobile: customer.mobile,
-        amount: linkedTx.amount,
-        milkQuantity: linkedTx.quantity,
-        description: `Milk transaction paid: ${linkedTx.quantity.toFixed(2)}L for ₹${linkedTx.amount}`,
-        performedBy: user?.userId || user?.id,
-        performedByName: user?.name || "System",
-      });
-    }
-    
     return res.status(201).json(payment);
   } catch (error) {
     console.error("[payments] Error creating payment:", error);
@@ -243,33 +204,6 @@ const deletePaymentRecord = async (req, res) => {
   } catch (error) {
     console.error("[payments] Error deleting payment:", error);
     return res.status(500).json({ error: "Failed to delete payment" });
-  }
-};
-
-const getPaymentLogs = async (req, res) => {
-  try {
-    const { customerId, paymentId, milkTransactionId, action, startDate, endDate, limit } = req.query;
-    
-    const filters = {};
-    if (customerId) filters.customerId = customerId;
-    if (paymentId) filters.paymentId = paymentId;
-    if (milkTransactionId) filters.milkTransactionId = milkTransactionId;
-    if (action) filters.action = action;
-    if (startDate) filters.startDate = startDate;
-    if (endDate) filters.endDate = endDate;
-    if (limit) filters.limit = parseInt(limit, 10);
-    
-    // If user is Consumer (role 2), only show their own logs
-    const user = req.user;
-    if (user && user.role === 2) {
-      filters.customerId = user.userId || user.id;
-    }
-    
-    const logs = await fetchPaymentLogs(filters);
-    return res.json(logs);
-  } catch (error) {
-    console.error("[payments] Error fetching payment logs:", error);
-    return res.status(500).json({ error: "Failed to fetch payment logs" });
   }
 };
 
@@ -386,7 +320,6 @@ module.exports = {
   getPayment,
   updatePaymentRecord,
   deletePaymentRecord,
-  getPaymentLogs,
   listSettlements,
   createSettlementRecord,
   downloadClearedStatementPdf,

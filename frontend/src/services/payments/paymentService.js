@@ -103,33 +103,6 @@ export const paymentService = {
     await apiClient.delete(`/payments/${paymentId}`);
   },
 
-  /**
-   * Get payment logs
-   * @param {Object} filters - Optional filters (customerId, paymentId, milkTransactionId, action, startDate, endDate, limit)
-   * @returns {Promise<Array>}
-   */
-  getPaymentLogs: async (filters = {}) => {
-    const params = new URLSearchParams();
-    if (filters.customerId) params.append('customerId', filters.customerId);
-    if (filters.paymentId) params.append('paymentId', filters.paymentId);
-    if (filters.milkTransactionId) params.append('milkTransactionId', filters.milkTransactionId);
-    if (filters.action) params.append('action', filters.action);
-    if (filters.startDate) params.append('startDate', filters.startDate);
-    if (filters.endDate) params.append('endDate', filters.endDate);
-    if (filters.limit) params.append('limit', filters.limit);
-    
-    const queryString = params.toString();
-    const url = queryString ? `/payments/logs?${queryString}` : '/payments/logs';
-    const response = await apiClient.get(url);
-    
-    // Convert date strings to Date objects
-    return response.map((log) => ({
-      ...log,
-      createdAt: new Date(log.createdAt),
-      updatedAt: new Date(log.updatedAt),
-    }));
-  },
-
   getSettlements: async (paymentDirection = null) => {
     const params = new URLSearchParams();
     if (paymentDirection) params.append('paymentDirection', paymentDirection);

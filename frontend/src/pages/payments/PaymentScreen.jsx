@@ -37,8 +37,6 @@ export default function PaymentScreen({ onNavigate, onLogout }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [pendingMilkTransactions, setPendingMilkTransactions] = useState([]);
-  const [paymentLogs, setPaymentLogs] = useState([]);
-  const [showLogs, setShowLogs] = useState(false);
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [settlingCustomerMobile, setSettlingCustomerMobile] = useState(null);
   const [downloadClearedPdfLoading, setDownloadClearedPdfLoading] = useState(null); // null | 'all' | customerMobile
@@ -273,15 +271,6 @@ export default function PaymentScreen({ onNavigate, onLogout }) {
     }
   };
   
-  const loadPaymentLogs = async () => {
-    try {
-      const logs = await paymentService.getPaymentLogs({ limit: 100 });
-      setPaymentLogs(logs);
-    } catch (error) {
-      console.error('Failed to load payment logs:', error);
-    }
-  };
-
   const handleCreatePayment = async () => {
     if (submittingPayment) return; // Double-tap / double submit prevent
     // Validation
@@ -1253,75 +1242,6 @@ export default function PaymentScreen({ onNavigate, onLogout }) {
           </View>
         </Modal>
 
-      {/* Payment Logs Modal */}
-      <Modal
-        visible={showLogs}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowLogs(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Payment Logs</Text>
-              <TouchableOpacity
-                onPress={() => setShowLogs(false)}
-                style={styles.closeButton}
-              >
-                <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.logsContainer}>
-              {paymentLogs.length === 0 ? (
-                <View style={styles.centerContainer}>
-                  <Text style={styles.emptyText}>No logs found</Text>
-                </View>
-              ) : (
-                paymentLogs.map((log) => (
-                  <View key={log._id} style={styles.logItem}>
-                    <View style={styles.logHeader}>
-                      <Text style={styles.logAction}>
-                        {log.action === 'payment_created' ? '💰 Payment Created' :
-                         log.action === 'milk_paid' ? '🥛 Milk Paid' :
-                         log.action === 'payment_updated' ? '✏️ Payment Updated' :
-                         log.action === 'payment_deleted' ? '🗑️ Payment Deleted' :
-                         '📝 Activity'}
-                      </Text>
-                      <Text style={styles.logDate}>
-                        {new Date(log.createdAt).toLocaleString('en-IN')}
-                      </Text>
-                    </View>
-                    {log.customerName && (
-                      <Text style={styles.logCustomer}>
-                        Customer: {log.customerName} ({log.customerMobile})
-                      </Text>
-                    )}
-                    {log.amount && (
-                      <Text style={styles.logAmount}>
-                        Amount: {formatCurrency(log.amount)}
-                      </Text>
-                    )}
-                    {log.milkQuantity && (
-                      <Text style={styles.logQuantity}>
-                        Milk: {log.milkQuantity.toFixed(2)}L
-                      </Text>
-                    )}
-                    {log.description && (
-                      <Text style={styles.logDescription}>{log.description}</Text>
-                    )}
-                    {log.performedByName && (
-                      <Text style={styles.logPerformedBy}>
-                        By: {log.performedByName}
-                      </Text>
-                    )}
-                  </View>
-                ))
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
       </View>
     );
   }
@@ -1699,71 +1619,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
     textAlign: 'center',
-  },
-  logsButton: {
-    backgroundColor: '#2196F3',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
-    alignItems: 'center',
-  },
-  logsButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  logsContainer: {
-    flex: 1,
-    padding: 15,
-  },
-  logItem: {
-    backgroundColor: '#F9F9F9',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
-    borderLeftWidth: 3,
-    borderLeftColor: '#2196F3',
-  },
-  logHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  logAction: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  logDate: {
-    fontSize: 12,
-    color: '#999',
-  },
-  logCustomer: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
-  },
-  logAmount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4CAF50',
-    marginBottom: 4,
-  },
-  logQuantity: {
-    fontSize: 13,
-    color: '#2196F3',
-    marginBottom: 4,
-  },
-  logDescription: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
-    fontStyle: 'italic',
-  },
-  logPerformedBy: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 4,
   },
   modalOverlay: {
     flex: 1,

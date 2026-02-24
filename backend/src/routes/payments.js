@@ -6,7 +6,6 @@ const {
   getPayment,
   updatePaymentRecord,
   deletePaymentRecord,
-  getPaymentLogs,
   listSettlements,
   createSettlementRecord,
   downloadClearedStatementPdf,
@@ -16,9 +15,6 @@ const router = Router();
 
 // GET /payments - List all payments (with optional filters)
 router.get("/", requireAuth, listPayments);
-
-// GET /payments/logs - Get payment logs
-router.get("/logs", requireAuth, getPaymentLogs);
 
 // GET /payments/settlements - List all settlements (for balance reset)
 router.get("/settlements", requireAuth, listSettlements);

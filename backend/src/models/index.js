@@ -7,7 +7,6 @@ module.exports = {
   ...require("./sellers"),
   ...require("./whatsappMessage"),
   ...require("./payments"),
-  ...require("./paymentLogs"),
   ...require("./notification"),
   ...require("./deliveryOverride"),
 };

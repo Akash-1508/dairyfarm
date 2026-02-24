@@ -9,7 +9,6 @@ const {
   getUnpaidMilkTransactions: getUnpaidMilkTransactionsModel,
   findUserByMobile,
   createPayment,
-  createPaymentLog,
   createNotification,
   MilkTransaction,
   findBuyerByUserId,
@@ -115,34 +114,6 @@ const createMilkSale = async (req, res) => {
           milkTransactionIds: [tx._id],
           milkQuantity: tx.quantity || 0,
           notes: `Paid at milk sale · ${(tx.quantity || 0).toFixed(2)} L`,
-        });
-
-        await createPaymentLog({
-          action: "payment_created",
-          paymentId: payment._id,
-          customerId: buyerUser._id,
-          customerName: buyerUser.name,
-          customerMobile: buyerPhone,
-          amount: amountReceived,
-          milkTransactionId: tx._id,
-          milkQuantity: tx.quantity,
-          description: `Payment of ₹${amountReceived} received at milk sale (${(tx.quantity || 0).toFixed(2)} L)`,
-          performedBy: req.user?.userId || req.user?.id,
-          performedByName: req.user?.name || "System",
-          metadata: { source: "milk_sale" },
-        });
-        await createPaymentLog({
-          action: "milk_paid",
-          paymentId: payment._id,
-          milkTransactionId: tx._id,
-          customerId: buyerUser._id,
-          customerName: buyerUser.name,
-          customerMobile: buyerPhone,
-          amount: amountReceived,
-          milkQuantity: tx.quantity,
-          description: `Milk sale paid: ${(tx.quantity || 0).toFixed(2)} L for ₹${amountReceived}`,
-          performedBy: req.user?.userId || req.user?.id,
-          performedByName: req.user?.name || "System",
         });
 
         await MilkTransaction.findByIdAndUpdate(tx._id, {
