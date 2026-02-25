@@ -1124,9 +1124,12 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
               <View style={styles.addMilkBuyerInfo}>
                 <Text style={styles.addMilkBuyerName}>{addMilkBuyer.name}</Text>
                 <Text style={styles.addMilkBuyerPhone}>{addMilkBuyer.phone}</Text>
-                <Text style={styles.addMilkBuyerMilkSource}>
-                  Milk: {MILK_SOURCE_TYPES.find((s) => s.value === (addMilkBuyer.milkSource || 'cow'))?.label || (addMilkBuyer.milkSource || 'cow')}
-                </Text>
+                <View style={styles.addMilkSourceRow}>
+                  <Text style={styles.addMilkSourceLabel}>Milk source (from buyer):</Text>
+                  <Text style={styles.addMilkBuyerMilkSource}>
+                    {MILK_SOURCE_TYPES.find((s) => s.value === (addMilkBuyer.milkSource || 'cow'))?.label || String(addMilkBuyer.milkSource || 'cow').charAt(0).toUpperCase() + String(addMilkBuyer.milkSource || 'cow').slice(1)}
+                  </Text>
+                </View>
               </View>
             )}
             <ScrollView style={styles.formContainer}>
@@ -1492,11 +1495,25 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
   },
-  addMilkBuyerMilkSource: {
-    fontSize: 13,
-    color: '#2196F3',
-    marginTop: 4,
+  addMilkSourceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: '#E3F2FD',
+    borderRadius: 8,
+    gap: 8,
+  },
+  addMilkSourceLabel: {
+    fontSize: 14,
+    color: '#333',
     fontWeight: '600',
+  },
+  addMilkBuyerMilkSource: {
+    fontSize: 14,
+    color: '#1565C0',
+    fontWeight: '700',
   },
   totalPreview: {
     fontSize: 16,
