@@ -8,8 +8,8 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  Image,
 } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
 import HeaderWithMenu from '../../components/common/HeaderWithMenu';
 import { milkService } from '../../services/milk/milkService';
 import { paymentService } from '../../services/payments/paymentService';
@@ -20,7 +20,7 @@ export default function BuyerPendingPaymentScreen({ onNavigate, onLogout }) {
   const [transactions, setTransactions] = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [upiSettings, setUpiSettings] = useState({ upiId: '', upiName: 'Farm' });
+  const [upiSettings, setUpiSettings] = useState({ upiId: '', upiName: 'Farm', qrImageBase64: null });
 
   useEffect(() => {
     loadData();
@@ -32,12 +32,16 @@ export default function BuyerPendingPaymentScreen({ onNavigate, onLogout }) {
       const [txData, paymentData, upi] = await Promise.all([
         milkService.getTransactions(),
         paymentService.getPayments().catch(() => []),
-        settingsService.getUpi().catch(() => ({ upiId: '', upiName: 'Farm' })),
+        settingsService.getUpi().catch(() => ({ upiId: '', upiName: 'Farm', qrImageBase64: null })),
       ]);
       const sales = (Array.isArray(txData) ? txData : []).filter((t) => t.type === 'sale');
       setTransactions(sales);
       setPayments(Array.isArray(paymentData) ? paymentData : []);
-      setUpiSettings({ upiId: upi.upiId || '', upiName: upi.upiName || 'Farm' });
+      setUpiSettings({
+        upiId: upi.upiId || '',
+        upiName: upi.upiName || 'Farm',
+        qrImageBase64: upi.qrImageBase64 || null,
+      });
     } catch (error) {
       Alert.alert('Error', 'Failed to load data.');
     } finally {
@@ -105,11 +109,15 @@ export default function BuyerPendingPaymentScreen({ onNavigate, onLogout }) {
               <View style={styles.qrCard}>
                 <Text style={styles.qrTitle}>Scan QR to pay</Text>
                 <Text style={styles.qrSub}>Amount: {formatCurrency(pendingAmount)}</Text>
-                {upiString && (
+                {upiSettings.qrImageBase64 ? (
                   <View style={styles.qrWrap}>
-                    <QRCode value={upiString} size={200} />
+                    <Image
+                      source={{ uri: `data:image/png;base64,${upiSettings.qrImageBase64}` }}
+                      style={styles.qrImage}
+                      resizeMode="contain"
+                    />
                   </View>
-                )}
+                ) : null}
                 <Text style={styles.upiIdText}>{upiSettings.upiId}</Text>
                 <Text style={styles.upiNameText}>{upiSettings.upiName}</Text>
               </View>
@@ -170,6 +178,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 12,
   },
+  qrImage: { width: 200, height: 200 },
   upiIdText: { fontSize: 14, color: '#1565C0', fontWeight: '600' },
   upiNameText: { fontSize: 13, color: '#666', marginTop: 4 },
   payButton: {

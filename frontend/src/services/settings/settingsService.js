@@ -8,7 +8,11 @@ import { apiClient } from '../api/apiClient';
 export const settingsService = {
   getUpi: async () => {
     const res = await apiClient.get('/settings/upi');
-    return { upiId: res.upiId || '', upiName: res.upiName || 'Farm' };
+    return {
+      upiId: res.upiId || '',
+      upiName: res.upiName || 'Farm',
+      qrImageBase64: res.qrImageBase64 || null,
+    };
   },
 
   updateUpi: async ({ upiId, upiName }) => {
