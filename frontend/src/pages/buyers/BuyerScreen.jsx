@@ -90,6 +90,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
       return;
     }
     const totalAmount = Math.round(q * rate * 100) / 100;
+    const milkSource = (addMilkBuyer.milkSource && ['cow', 'buffalo', 'sheep', 'goat'].includes(addMilkBuyer.milkSource)) ? addMilkBuyer.milkSource : 'cow';
     try {
       setAddMilkLoading(true);
       await milkService.recordSale({
@@ -99,6 +100,7 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
         totalAmount,
         buyer: addMilkBuyer.name,
         buyerPhone: addMilkBuyer.phone,
+        milkSource,
       });
       setShowAddMilkModal(false);
       setAddMilkBuyer(null);
@@ -662,8 +664,13 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
                             : 'Settled'}
                       </Text>
                     </View>
-                    {(buyer.fixedPrice || buyer.dailyQuantity) && (
+                    {(buyer.fixedPrice || buyer.dailyQuantity || buyer.milkSource) && (
                       <View style={styles.buyerDetails}>
+                        {buyer.milkSource && (
+                          <Text style={styles.buyerDetailText}>
+                            Milk: {MILK_SOURCE_TYPES.find((s) => s.value === buyer.milkSource)?.label || buyer.milkSource}
+                          </Text>
+                        )}
                         {buyer.fixedPrice && (
                           <Text style={styles.buyerDetailText}>
                             Fixed Price: {formatCurrency(buyer.fixedPrice)}/L
@@ -1117,6 +1124,9 @@ export default function BuyerScreen({ onNavigate, onLogout }) {
               <View style={styles.addMilkBuyerInfo}>
                 <Text style={styles.addMilkBuyerName}>{addMilkBuyer.name}</Text>
                 <Text style={styles.addMilkBuyerPhone}>{addMilkBuyer.phone}</Text>
+                <Text style={styles.addMilkBuyerMilkSource}>
+                  Milk: {MILK_SOURCE_TYPES.find((s) => s.value === (addMilkBuyer.milkSource || 'cow'))?.label || (addMilkBuyer.milkSource || 'cow')}
+                </Text>
               </View>
             )}
             <ScrollView style={styles.formContainer}>
@@ -1481,6 +1491,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginTop: 2,
+  },
+  addMilkBuyerMilkSource: {
+    fontSize: 13,
+    color: '#2196F3',
+    marginTop: 4,
+    fontWeight: '600',
   },
   totalPreview: {
     fontSize: 16,

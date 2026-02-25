@@ -75,10 +75,15 @@ const createMilkSale = async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   try {
+    const raw = parsed.data;
+    const milkSource = (raw.milkSource && ["cow", "buffalo", "sheep", "goat"].includes(String(raw.milkSource).toLowerCase()))
+      ? String(raw.milkSource).toLowerCase()
+      : "cow";
     const normalizedData = {
-      ...parsed.data,
-      buyerPhone: parsed.data.buyerPhone?.trim() || undefined,
-      sellerPhone: parsed.data.sellerPhone?.trim() || undefined,
+      ...raw,
+      buyerPhone: raw.buyerPhone?.trim() || undefined,
+      sellerPhone: raw.sellerPhone?.trim() || undefined,
+      milkSource,
     };
     const requestSource = req.user?.role === 2 ? "buyer_app" : "admin";
     const tx = await addMilkTransaction({ type: "sale", requestSource, ...normalizedData });

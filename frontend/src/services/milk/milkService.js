@@ -7,6 +7,9 @@ import { apiClient } from '../api/apiClient';
 
 export const milkService = {
   recordSale: async (transaction) => {
+    const milkSource = (transaction.milkSource && ['cow', 'buffalo', 'sheep', 'goat'].includes(transaction.milkSource))
+      ? transaction.milkSource
+      : 'cow';
     const payload = {
       date: transaction.date.toISOString(),
       quantity: transaction.quantity,
@@ -16,7 +19,7 @@ export const milkService = {
       buyerPhone: transaction.buyerPhone,
       notes: transaction.notes,
       fixedPrice: transaction.fixedPrice,
-      milkSource: transaction.milkSource,
+      milkSource,
     };
     if (transaction.paymentType) payload.paymentType = transaction.paymentType;
     if (transaction.amountReceived != null) payload.amountReceived = transaction.amountReceived;
