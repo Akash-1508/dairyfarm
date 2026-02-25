@@ -865,7 +865,8 @@ async function downloadConsumerConsumptionPdf(req, res) {
           buyerName: { $first: "$buyer" },
           totalQuantity: { $sum: "$quantity" },
           totalAmount: { $sum: "$totalAmount" },
-          transactionCount: { $sum: 1 }
+          transactionCount: { $sum: 1 },
+          milkSources: { $addToSet: { $ifNull: ["$milkSource", "cow"] } }
         }
       },
       { $sort: { totalAmount: -1 } }
@@ -877,16 +878,20 @@ async function downloadConsumerConsumptionPdf(req, res) {
       role: UserRoles.CONSUMER
     }).select("name mobile");
     const nameByMobile = new Map(users.map((u) => [u.mobile, u.name]));
+    const milkSourceLabels = { cow: "Cow", buffalo: "Buffalo", sheep: "Sheep", goat: "Goat" };
     const summary = agg.map((e) => {
       const qty = Number(e.totalQuantity ?? 0);
       const amt = Number(e.totalAmount ?? 0);
+      const sources = (e.milkSources || []).filter(Boolean).map((s) => milkSourceLabels[s] || s);
+      const sourceStr = [...new Set(sources)].length ? [...new Set(sources)].join(", ") : "Cow";
       return {
         name: nameByMobile.get(e._id) || e.buyerName || "Unknown",
         mobile: e._id,
         totalQuantity: qty,
         totalAmount: amt,
         averageRate: qty ? amt / qty : 0,
-        transactionCount: Number(e.transactionCount ?? 0)
+        transactionCount: Number(e.transactionCount ?? 0),
+        milkSource: sourceStr
       };
     });
 
@@ -911,19 +916,20 @@ async function downloadConsumerConsumptionPdf(req, res) {
     );
     doc.moveDown(1);
 
-    const colWidths = [22, 70, 45, 42, 40, 28, 52];
+    const colWidths = [22, 70, 45, 38, 42, 40, 28, 52];
     const summaryRows = summary.map((r, i) => [
       String(i + 1),
       (r.name || "").slice(0, 20),
       (r.mobile || "").slice(0, 12),
+      (r.milkSource || "Cow").slice(0, 10),
       r.totalQuantity.toFixed(2),
       r.averageRate.toFixed(2),
       String(r.transactionCount),
       r.totalAmount.toFixed(2)
     ]);
-    const totalRow = ["", "TOTAL", "", totalQty.toFixed(2), "", "", totalAmt.toFixed(2)];
+    const totalRow = ["", "TOTAL", "", "", totalQty.toFixed(2), "", "", totalAmt.toFixed(2)];
     const summaryTable = {
-      headers: ["S.No.", "Name", "Mobile", "Total Qty (L)", "Price (₹/L)", "Days", "Total (₹)"],
+      headers: ["S.No.", "Name", "Mobile", "Source", "Total Qty (L)", "Price (₹/L)", "Days", "Total (₹)"],
       rows: [...summaryRows, totalRow]
     };
     await doc.table(summaryTable, {
@@ -944,21 +950,26 @@ async function downloadConsumerConsumptionPdf(req, res) {
       { $match: { normalizedBuyerPhone: { $ne: "" } } },
       ...(normalizedBuyerMobile ? [{ $match: { normalizedBuyerPhone: normalizedBuyerMobile } }] : []),
       { $sort: { date: 1 } },
-      { $project: { date: 1, buyer: 1, buyerPhone: 1, quantity: 1, pricePerLiter: 1, totalAmount: 1, normalizedBuyerPhone: 1 } }
+      { $project: { date: 1, buyer: 1, buyerPhone: 1, quantity: 1, pricePerLiter: 1, totalAmount: 1, normalizedBuyerPhone: 1, milkSource: 1 } }
     ];
     const detailTx = await MilkTransaction.aggregate(detailPipeline);
     doc.moveDown(1);
     doc.fontSize(12).font("Helvetica-Bold").text("Day-wise Detail (har din ki har transaction)", { underline: true });
     doc.moveDown(0.5);
     if (normalizedBuyerMobile && detailTx.length > 0) {
-      const dCols = [70, 50, 55, 55];
-      const detailRows = detailTx.map((tx) => [
-        tx.date ? new Date(tx.date).toISOString().slice(0, 10) : "",
-        Number(tx.quantity ?? 0).toFixed(2),
-        Number(tx.pricePerLiter ?? 0).toFixed(2),
-        Number(tx.totalAmount ?? 0).toFixed(2)
-      ]);
-      const daywiseTable = { headers: ["Date", "Qty (L)", "Price/L", "Total (₹)"], rows: detailRows };
+      const dCols = [70, 42, 50, 55, 55];
+      const detailRows = detailTx.map((tx) => {
+        const src = (tx.milkSource && ["cow", "buffalo", "sheep", "goat"].includes(tx.milkSource)) ? tx.milkSource : "cow";
+        const srcLabel = milkSourceLabels[src] || src;
+        return [
+          tx.date ? new Date(tx.date).toISOString().slice(0, 10) : "",
+          srcLabel,
+          Number(tx.quantity ?? 0).toFixed(2),
+          Number(tx.pricePerLiter ?? 0).toFixed(2),
+          Number(tx.totalAmount ?? 0).toFixed(2)
+        ];
+      });
+      const daywiseTable = { headers: ["Date", "Source", "Qty (L)", "Price/L", "Total (₹)"], rows: detailRows };
       await doc.table(daywiseTable, {
         columnsSize: dCols,
         divider: tableDivider,
@@ -966,21 +977,24 @@ async function downloadConsumerConsumptionPdf(req, res) {
         prepareRow: () => doc.font("Helvetica").fontSize(9)
       });
     } else if (!normalizedBuyerMobile && detailTx.length > 0) {
-      const dCols = [55, 55, 45, 40, 45, 50];
+      const dCols = [55, 55, 38, 40, 40, 45, 50];
       const detailRows = detailTx.map((tx) => {
         const ph = (tx.normalizedBuyerPhone || tx.buyerPhone || "").trim();
         const nm = nameByMobile.get(ph) || tx.buyer || "Unknown";
+        const src = (tx.milkSource && ["cow", "buffalo", "sheep", "goat"].includes(tx.milkSource)) ? tx.milkSource : "cow";
+        const srcLabel = milkSourceLabels[src] || src;
         return [
           tx.date ? new Date(tx.date).toISOString().slice(0, 10) : "",
           (nm || "").slice(0, 16),
           ph,
+          srcLabel,
           Number(tx.quantity ?? 0).toFixed(2),
           Number(tx.pricePerLiter ?? 0).toFixed(2),
           Number(tx.totalAmount ?? 0).toFixed(2)
         ];
       });
       const daywiseTable = {
-        headers: ["Date", "Consumer", "Mobile", "Qty (L)", "Price/L", "Total (₹)"],
+        headers: ["Date", "Consumer", "Mobile", "Source", "Qty (L)", "Price/L", "Total (₹)"],
         rows: detailRows
       };
       await doc.table(daywiseTable, {

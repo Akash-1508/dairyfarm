@@ -11,6 +11,7 @@ const { router: whatsappRouter } = require("./whatsapp");
 const { router: paymentsRouter } = require("./payments");
 const { router: notificationsRouter } = require("./notifications");
 const { router: deliveryOverrideRouter } = require("./deliveryOverride");
+const { router: settingsRouter } = require("./settings");
 
 const appRouter = Router();
 
@@ -26,6 +27,7 @@ appRouter.use("/whatsapp", whatsappRouter);
 appRouter.use("/payments", paymentsRouter);
 appRouter.use("/notifications", notificationsRouter);
 appRouter.use("/delivery-overrides", deliveryOverrideRouter);
+appRouter.use("/settings", settingsRouter);
 
 function registerRoutes(app) {
   app.use(appRouter);

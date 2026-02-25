@@ -17,6 +17,7 @@ import AddAdminScreen from './src/pages/admin/AddAdminScreen';
 import AdminListScreen from './src/pages/admin/AdminListScreen';
 import PaymentScreen from './src/pages/payments/PaymentScreen';
 import PendingPaymentsScreen from './src/pages/payments/PendingPaymentsScreen';
+import SettingsScreen from './src/pages/settings/SettingsScreen';
 import BuyerDashboardScreen from './src/pages/buyerApp/BuyerDashboardScreen';
 import BuyerMilkRequestScreen from './src/pages/buyerApp/BuyerMilkRequestScreen';
 import BuyerTransactionHistoryScreen from './src/pages/buyerApp/BuyerTransactionHistoryScreen';
@@ -87,7 +88,7 @@ function App() {
 
   const navigateToScreen = (screen, params) => {
     // Protected screens - only accessible after login
-    const protectedScreens = ['Dashboard', 'Animals', 'Milk', 'Quick Sale', 'Delivery Schedule', 'Milk Requests', 'Notifications', 'Chara', 'Profit/Loss', 'Milk Sales Report', 'Buyer', 'Seller', 'Payments', 'Pending Payments', 'Admin List', 'Add Admin', 'Buyer Dashboard', 'Milk Request', 'My Schedule', 'Transaction History', 'Payment History', 'Pending Payment', 'Pay'];
+    const protectedScreens = ['Dashboard', 'Animals', 'Milk', 'Quick Sale', 'Delivery Schedule', 'Milk Requests', 'Notifications', 'Chara', 'Profit/Loss', 'Milk Sales Report', 'Buyer', 'Seller', 'Payments', 'Pending Payments', 'Admin List', 'Add Admin', 'Settings', 'Buyer Dashboard', 'Milk Request', 'My Schedule', 'Transaction History', 'Payment History', 'Pending Payment', 'Pay'];
     
     // If trying to access protected screen without login, redirect to login
     if (protectedScreens.includes(screen) && !isAuthenticated) {
@@ -188,6 +189,8 @@ function App() {
         return <PaymentScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Pending Payments':
         return <PendingPaymentsScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
+      case 'Settings':
+        return <SettingsScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Buyer Dashboard':
         return <BuyerDashboardScreen onNavigate={navigateToScreen} onLogout={handleLogout} />;
       case 'Milk Request':

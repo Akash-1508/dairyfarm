@@ -12,6 +12,7 @@ import HeaderWithMenu from '../../components/common/HeaderWithMenu';
 import { milkService } from '../../services/milk/milkService';
 import { paymentService } from '../../services/payments/paymentService';
 import { formatCurrency } from '../../utils/currencyUtils';
+import { MILK_SOURCE_TYPES } from '../../constants';
 
 const formatDate = (d) => {
   if (!d) return '';
@@ -103,13 +104,20 @@ export default function BuyerDashboardScreen({ onNavigate, onLogout }) {
               {recentTransactions.length === 0 ? (
                 <Text style={styles.emptyText}>No milk purchases yet.</Text>
               ) : (
-                recentTransactions.map((tx, i) => (
-                  <View key={tx._id || i} style={styles.txRow}>
-                    <Text style={styles.txDate}>{formatDate(tx.date)}</Text>
-                    <Text style={styles.txQty}>{Number(tx.quantity).toFixed(2)} L</Text>
-                    <Text style={styles.txAmount}>{formatCurrency(tx.totalAmount)}</Text>
-                  </View>
-                ))
+                recentTransactions.map((tx, i) => {
+                  const src = tx.milkSource || 'cow';
+                  const sourceLabel = MILK_SOURCE_TYPES.find((s) => s.value === src)?.label || src;
+                  return (
+                    <View key={tx._id || i} style={styles.txRow}>
+                      <View style={styles.txLeft}>
+                        <Text style={styles.txDate}>{formatDate(tx.date)}</Text>
+                        <Text style={styles.txSource}>{sourceLabel}</Text>
+                      </View>
+                      <Text style={styles.txQty}>{Number(tx.quantity).toFixed(2)} L</Text>
+                      <Text style={styles.txAmount}>{formatCurrency(tx.totalAmount)}</Text>
+                    </View>
+                  );
+                })
               )}
               <TouchableOpacity onPress={() => onNavigate('Transaction History')} style={styles.moreLink}>
                 <Text style={styles.moreLinkText}>View all →</Text>
@@ -155,9 +163,11 @@ const styles = StyleSheet.create({
   section: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 24, elevation: 2, shadowOpacity: 0.1, shadowRadius: 3 },
   sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 12, color: '#333' },
   emptyText: { color: '#888', fontSize: 14 },
-  txRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  txRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  txLeft: { flex: 1 },
   txDate: { fontSize: 14, color: '#555' },
-  txQty: { fontSize: 14, color: '#555' },
+  txSource: { fontSize: 12, color: '#2196F3', marginTop: 2, fontWeight: '600' },
+  txQty: { fontSize: 14, color: '#555', marginRight: 12 },
   txAmount: { fontSize: 14, fontWeight: '600', color: '#333' },
   moreLink: { marginTop: 12 },
   moreLinkText: { color: '#4CAF50', fontWeight: '600', fontSize: 14 },

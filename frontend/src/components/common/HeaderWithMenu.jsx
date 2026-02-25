@@ -28,6 +28,7 @@ const baseMenuItems = [
   { id: 8, title: 'Seller', icon: '🏪' },
   { id: 11, title: 'Payments', icon: '💵' },
   { id: 12, title: 'Pending Payments', icon: '📋' },
+  { id: 14, title: 'Settings', icon: '⚙️' },
   { id: 13, title: 'Notifications', icon: '🔔' },
 ];
 

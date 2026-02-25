@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,19 +9,18 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 import HeaderWithMenu from '../../components/common/HeaderWithMenu';
 import { milkService } from '../../services/milk/milkService';
 import { paymentService } from '../../services/payments/paymentService';
+import { settingsService } from '../../services/settings/settingsService';
 import { formatCurrency } from '../../utils/currencyUtils';
-
-// Farm UPI ID - replace with actual farm UPI for production. GPay/PhonePe don't provide an in-app API; we open UPI intent so user pays via their app.
-const FARM_UPI_ID = 'errahul690@oksbi'; // e.g. 9876543210@ybl or yourname@paytm
-const FARM_UPI_NAME = 'HiTech Dairy Farm';
 
 export default function BuyerPendingPaymentScreen({ onNavigate, onLogout }) {
   const [transactions, setTransactions] = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [upiSettings, setUpiSettings] = useState({ upiId: '', upiName: 'Farm' });
 
   useEffect(() => {
     loadData();
@@ -30,13 +29,15 @@ export default function BuyerPendingPaymentScreen({ onNavigate, onLogout }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [txData, paymentData] = await Promise.all([
+      const [txData, paymentData, upi] = await Promise.all([
         milkService.getTransactions(),
         paymentService.getPayments().catch(() => []),
+        settingsService.getUpi().catch(() => ({ upiId: '', upiName: 'Farm' })),
       ]);
       const sales = (Array.isArray(txData) ? txData : []).filter((t) => t.type === 'sale');
       setTransactions(sales);
       setPayments(Array.isArray(paymentData) ? paymentData : []);
+      setUpiSettings({ upiId: upi.upiId || '', upiName: upi.upiName || 'Farm' });
     } catch (error) {
       Alert.alert('Error', 'Failed to load data.');
     } finally {
@@ -44,28 +45,37 @@ export default function BuyerPendingPaymentScreen({ onNavigate, onLogout }) {
     }
   };
 
-  const totalMilkAmount = useMemo(
+  const totalMilkAmount = React.useMemo(
     () => transactions.reduce((sum, t) => sum + (Number(t.totalAmount) || 0), 0),
     [transactions]
   );
-  const totalPaid = useMemo(
+  const totalPaid = React.useMemo(
     () => payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
     [payments]
   );
   const pendingAmount = totalMilkAmount - totalPaid;
+
+  const upiString = React.useMemo(() => {
+    const { upiId, upiName } = upiSettings;
+    if (!upiId || !upiId.trim()) return null;
+    const amount = pendingAmount > 0 ? pendingAmount.toFixed(2) : '0';
+    const encodedName = encodeURIComponent(upiName.trim() || 'Farm');
+    return `upi://pay?pa=${encodeURIComponent(upiId.trim())}&pn=${encodedName}&am=${amount}&cu=INR`;
+  }, [upiSettings, pendingAmount]);
 
   const openPayViaUPI = () => {
     if (pendingAmount <= 0) {
       Alert.alert('Info', 'No pending amount to pay.');
       return;
     }
-    const amount = pendingAmount.toFixed(2);
-    const encodedName = encodeURIComponent(FARM_UPI_NAME);
-    const url = `upi://pay?pa=${FARM_UPI_ID}&pn=${encodedName}&am=${amount}&cu=INR`;
-    Linking.openURL(url).catch(() => {
+    if (!upiString) {
+      Alert.alert('Info', 'UPI ID is not set by the farm. Please pay in cash and share the reference to the farm.');
+      return;
+    }
+    Linking.openURL(upiString).catch(() => {
       Alert.alert(
         'Cannot open UPI',
-        'Install GPay, PhonePe or any UPI app. Or pay manually and share the reference number to the farm.'
+        'Install GPay, PhonePe or any UPI app. Or scan the QR above and pay.'
       );
     });
   };
@@ -91,6 +101,20 @@ export default function BuyerPendingPaymentScreen({ onNavigate, onLogout }) {
               </Text>
             </View>
 
+            {upiSettings.upiId && upiSettings.upiId.trim() && (
+              <View style={styles.qrCard}>
+                <Text style={styles.qrTitle}>Scan QR to pay</Text>
+                <Text style={styles.qrSub}>Amount: {formatCurrency(pendingAmount)}</Text>
+                {upiString && (
+                  <View style={styles.qrWrap}>
+                    <QRCode value={upiString} size={200} />
+                  </View>
+                )}
+                <Text style={styles.upiIdText}>{upiSettings.upiId}</Text>
+                <Text style={styles.upiNameText}>{upiSettings.upiName}</Text>
+              </View>
+            )}
+
             <TouchableOpacity
               style={[styles.payButton, pendingAmount <= 0 && styles.payButtonDisabled]}
               onPress={openPayViaUPI}
@@ -100,7 +124,9 @@ export default function BuyerPendingPaymentScreen({ onNavigate, onLogout }) {
             </TouchableOpacity>
 
             <Text style={styles.note}>
-              This will open your UPI app (GPay, PhonePe, etc.) with the pending amount. There is no in-app payment API; pay and share the transaction reference to the farm for confirmation.
+              {upiSettings.upiId
+                ? 'Scan the QR or tap the button to open your UPI app with the pending amount. After paying, share the transaction reference to the farm for confirmation.'
+                : 'UPI is not configured yet. Please pay in cash and share the reference to the farm.'}
             </Text>
           </>
         )}
@@ -126,6 +152,26 @@ const styles = StyleSheet.create({
   cardLabel: { fontSize: 14, color: '#666', marginBottom: 8 },
   cardValue: { fontSize: 28, fontWeight: '700', color: '#333' },
   pendingText: { color: '#d32f2f' },
+  qrCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    alignItems: 'center',
+    elevation: 2,
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  qrTitle: { fontSize: 16, fontWeight: '700', color: '#333', marginBottom: 4 },
+  qrSub: { fontSize: 14, color: '#666', marginBottom: 16 },
+  qrWrap: {
+    padding: 16,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  upiIdText: { fontSize: 14, color: '#1565C0', fontWeight: '600' },
+  upiNameText: { fontSize: 13, color: '#666', marginTop: 4 },
   payButton: {
     backgroundColor: '#4CAF50',
     paddingVertical: 16,
